@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,26 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
 import SharedHeader from '../components/SharedHeader';
+import LocationService from '../services/LocationService';
 
 const { width } = Dimensions.get('window');
 
 const EmployeeDashboard = ({ navigation }) => {
   const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState(null);
+
+  useEffect(() => {
+    // Initialize location service for employees (with Atlanta default)
+    const initLocation = async () => {
+      // Get current location (defaults to Atlanta if no permission)
+      const location = await LocationService.getCurrentLocation();
+      if (location) {
+        setCurrentLocation(location);
+      }
+    };
+
+    initLocation();
+  }, []);
   const [selectedDispute, setSelectedDispute] = useState(null);
 
   // Mock data for admin dashboard

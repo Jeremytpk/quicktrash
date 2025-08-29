@@ -159,7 +159,7 @@ const SideMenu = ({ visible, onClose }) => {
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.logoSection}>
-                <Logo size={48} />
+                <Logo variant="menu" />
                 <View style={styles.userInfo}>
                   <Text style={styles.userName}>
                     {user?.displayName || 'User'}

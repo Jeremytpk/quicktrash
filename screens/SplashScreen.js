@@ -8,6 +8,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import Logo from '../components/Logo';
 
 const SplashScreen = () => {
   const navigation = useNavigation();
@@ -52,7 +53,7 @@ const SplashScreen = () => {
         ]}
       >
         <View style={styles.logoBackground}>
-          <Text style={styles.logoText}>QT</Text>
+          <Logo variant="splash" />
         </View>
         <View style={styles.logoGlow} />
       </Animated.View>

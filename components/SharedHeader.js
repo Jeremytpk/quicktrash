@@ -72,7 +72,7 @@ const SharedHeader = ({
               onPress={handleLogoPress}
               activeOpacity={0.7}
             >
-              <Logo size={32} />
+              <Logo variant="header" />
             </TouchableOpacity>
           )}
         </View>

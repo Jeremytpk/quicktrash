@@ -42,8 +42,16 @@ const Login = ({ navigation, route }) => {
       // Set role in context
       setUserRole(userRole)
       
+      // Check if this is the user's first login
+      const isFirstTime = await LocationService.isFirstTimeLocationRequest(userCredential.user.uid)
+      
       // Navigate to role-specific dashboard after successful login
       Alert.alert('Login Successful', 'You have been signed in!')
+      
+      // Request location permission for all users on first login
+      if (isFirstTime) {
+        await LocationService.requestPermissions(userCredential.user.uid, true)
+      }
       
       // Navigate based on user role
       switch (userRole) {
@@ -51,8 +59,8 @@ const Login = ({ navigation, route }) => {
           navigation.navigate('CustomerDashboard')
           break
         case 'contractor':
-          // Request location permission for contractors before navigation
-          const hasLocationPermission = await LocationService.requestPermissions()
+          // For contractors, location is mandatory - check again if needed
+          const hasLocationPermission = await LocationService.requestPermissions(userCredential.user.uid, false)
           if (hasLocationPermission) {
             navigation.navigate('ContractorDashboard')
           } else {
@@ -63,7 +71,7 @@ const Login = ({ navigation, route }) => {
                 {
                   text: 'Retry',
                   onPress: async () => {
-                    const retryPermission = await LocationService.requestPermissions()
+                    const retryPermission = await LocationService.requestPermissions(userCredential.user.uid, false)
                     if (retryPermission) {
                       navigation.navigate('ContractorDashboard')
                     }

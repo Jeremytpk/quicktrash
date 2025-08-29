@@ -79,8 +79,8 @@ const ContractorDashboard = ({ navigation }) => {
     if (activeJob && currentLocation) {
       // Generate route to the pickup location
       const jobRoute = LocationService.generateRoute({
-        latitude: activeJob.coordinates.lat,
-        longitude: activeJob.coordinates.lng
+        latitude: activeJob.coordinates.latitude,
+        longitude: activeJob.coordinates.longitude
       });
       
       if (jobRoute) {
@@ -88,8 +88,8 @@ const ContractorDashboard = ({ navigation }) => {
         const routeCoordinates = [
           currentLocation,
           {
-            latitude: activeJob.coordinates.lat,
-            longitude: activeJob.coordinates.lng
+            latitude: activeJob.coordinates.latitude,
+            longitude: activeJob.coordinates.longitude
           }
         ];
         
@@ -102,8 +102,8 @@ const ContractorDashboard = ({ navigation }) => {
       // Open navigation
       await LocationService.openNavigation(
         {
-          latitude: activeJob.coordinates.lat,
-          longitude: activeJob.coordinates.lng
+          latitude: activeJob.coordinates.latitude,
+          longitude: activeJob.coordinates.longitude
         },
         activeJob.type + ' pickup'
       );

@@ -9,6 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Logo from '../components/Logo';
 
 const { width, height } = Dimensions.get('window');
 
@@ -20,11 +21,7 @@ const RoleSelection = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Image
-          source={{ uri: 'https://placehold.co/120x120/34A853/FFFFFF?text=QT' }}
-          style={styles.logo}
-        />
-        <Text style={styles.title}>QuickTrash</Text>
+        <Logo size="xlarge" showText={true} />
         <Text style={styles.subtitle}>On-Demand Waste Management</Text>
       </View>
 

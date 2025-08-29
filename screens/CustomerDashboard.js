@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,26 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
 import OrderBasket from '../components/OrderBasket';
+import LocationService from '../services/LocationService';
 
 const { width } = Dimensions.get('window');
 
 const CustomerDashboard = ({ navigation }) => {
   const [showOrderModal, setShowOrderModal] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState(null);
+
+  useEffect(() => {
+    // Initialize location service for customers (with Atlanta default)
+    const initLocation = async () => {
+      // Get current location (defaults to Atlanta if no permission)
+      const location = await LocationService.getCurrentLocation();
+      if (location) {
+        setCurrentLocation(location);
+      }
+    };
+
+    initLocation();
+  }, []);
 
   const wasteTypes = [
     { id: 'household', name: 'Household Trash', icon: 'home', color: '#34A853' },

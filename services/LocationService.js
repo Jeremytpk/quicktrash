@@ -1,28 +1,65 @@
 import * as Location from 'expo-location';
 import { Alert, Platform, Linking } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 class LocationService {
   constructor() {
-    this.currentLocation = null;
+    // Default to Atlanta, GA coordinates
+    this.currentLocation = {
+      latitude: 33.7490,
+      longitude: -84.3880,
+      accuracy: null,
+      timestamp: Date.now(),
+      isDefault: true
+    };
     this.watchId = null;
     this.locationCallbacks = [];
   }
 
-  // Request location permissions
-  async requestPermissions() {
+  // Check if this is the first time requesting location for a user
+  async isFirstTimeLocationRequest(userId) {
+    try {
+      const hasRequested = await AsyncStorage.getItem(`location_requested_${userId}`);
+      return !hasRequested;
+    } catch (error) {
+      console.error('Error checking first time location request:', error);
+      return true;
+    }
+  }
+
+  // Mark that location has been requested for a user
+  async markLocationRequested(userId) {
+    try {
+      await AsyncStorage.setItem(`location_requested_${userId}`, 'true');
+    } catch (error) {
+      console.error('Error marking location requested:', error);
+    }
+  }
+
+  // Request location permissions with first-time user flow
+  async requestPermissions(userId = null, isFirstTime = false) {
     try {
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
       
       if (foregroundStatus !== 'granted') {
+        const message = isFirstTime 
+          ? 'Welcome to QuickTrash! To provide you with the best experience and show you relevant content based on your location, we need access to your location.'
+          : 'QuickTrash needs location access to show you nearby jobs and provide navigation. Please enable location permissions in your device settings.';
+        
         Alert.alert(
-          'Location Permission Required',
-          'QuickTrash needs location access to show you nearby jobs and provide navigation. Please enable location permissions in your device settings.',
+          isFirstTime ? 'Welcome to QuickTrash!' : 'Location Permission Required',
+          message,
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Location.requestForegroundPermissionsAsync() }
+            { text: isFirstTime ? 'Allow Location' : 'Open Settings', onPress: () => Location.requestForegroundPermissionsAsync() }
           ]
         );
         return false;
+      }
+
+      // Mark that we've requested location for this user
+      if (userId && isFirstTime) {
+        await this.markLocationRequested(userId);
       }
 
       // For contractors, we also need background location for job tracking
@@ -62,6 +99,7 @@ class LocationService {
         longitude: location.coords.longitude,
         accuracy: location.coords.accuracy,
         timestamp: location.timestamp,
+        isDefault: false
       };
 
       // Notify all listeners
@@ -97,6 +135,7 @@ class LocationService {
             longitude: location.coords.longitude,
             accuracy: location.coords.accuracy,
             timestamp: location.timestamp,
+            isDefault: false
           };
 
           // Notify all listeners
