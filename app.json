@@ -1,28 +1,84 @@
 {
   "expo": {
-    "name": "QT",
-    "slug": "QT",
+    "name": "QuickTrash",
+    "slug": "quicktrash-app",
     "version": "1.0.0",
+    "sdkVersion": "53.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "scheme": "quicktrash",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#34A853"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mycorp.myapp",
+      "bundleIdentifier": "com.quicktrash.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "QuickTrash needs location access to find nearby pickup services and provide accurate pickup locations.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "QuickTrash needs location access to track contractors and provide real-time pickup updates.",
+        "NSCameraUsageDescription": "QuickTrash needs camera access to take photos of trash items and verify pickups.",
+        "NSPhotoLibraryUsageDescription": "QuickTrash needs photo library access to upload images of trash items.",
+        "NSMicrophoneUsageDescription": "QuickTrash may need microphone access for voice messages in the chat feature."
+      }
     },
     "android": {
+      "edgeToEdgeEnabled": true,
+      "package": "com.quicktrash.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#34A853"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECORD_AUDIO",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+        }
       }
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-location",
+      "expo-image-picker",
+      "@react-native-firebase/crashlytics",
+      "expo-notifications",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "34.0.0"
+          },
+          "ios": {
+            "deploymentTarget": "15.1",
+            "useFrameworks": "static"
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
     }
   }
 }

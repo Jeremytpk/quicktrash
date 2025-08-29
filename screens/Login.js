@@ -8,12 +8,17 @@ import {
   Alert,
 } from 'react-native'
 import { signInWithEmailAndPassword } from 'firebase/auth'
-import { auth } from '../firebaseConfig' // Assuming db is not needed on this screen
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { auth, db } from '../firebaseConfig'
+import { useUser } from '../contexts/UserContext'
+import LocationService from '../services/LocationService'
 
 // This prop is automatically passed by React Navigation to screen components.
-const Login = ({ navigation }) => {
+const Login = ({ navigation, route }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const userRole = route.params?.userRole || 'customer'
+  const { setUserRole } = useUser()
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -21,10 +26,68 @@ const Login = ({ navigation }) => {
       return
     }
     try {
-      await signInWithEmailAndPassword(auth, email, password)
-      // On a real app, you would navigate to the main part of your app here.
-      // For now, the success alert is fine.
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      
+      // Store user role in Firestore if this is first login
+      const userRef = doc(db, 'users', userCredential.user.uid)
+      await setDoc(userRef, {
+        email: userCredential.user.email,
+        displayName: userCredential.user.displayName || email.split('@')[0],
+        role: userRole,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        isActive: true,
+      }, { merge: true })
+      
+      // Set role in context
+      setUserRole(userRole)
+      
+      // Navigate to role-specific dashboard after successful login
       Alert.alert('Login Successful', 'You have been signed in!')
+      
+      // Navigate based on user role
+      switch (userRole) {
+        case 'customer':
+          navigation.navigate('CustomerDashboard')
+          break
+        case 'contractor':
+          // Request location permission for contractors before navigation
+          const hasLocationPermission = await LocationService.requestPermissions()
+          if (hasLocationPermission) {
+            navigation.navigate('ContractorDashboard')
+          } else {
+            Alert.alert(
+              'Location Required',
+              'Location access is mandatory for contractors to receive job assignments and provide navigation. Please enable location permissions.',
+              [
+                {
+                  text: 'Retry',
+                  onPress: async () => {
+                    const retryPermission = await LocationService.requestPermissions()
+                    if (retryPermission) {
+                      navigation.navigate('ContractorDashboard')
+                    }
+                  }
+                },
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => {
+                    // Logout the user if they don't grant permission
+                    auth.signOut()
+                    Alert.alert('Logged Out', 'You have been logged out. Location access is required for contractors.')
+                  }
+                }
+              ]
+            )
+          }
+          break
+        case 'employee':
+          navigation.navigate('EmployeeDashboard')
+          break
+        default:
+          navigation.navigate('CustomerDashboard')
+      }
     } catch (error) {
       Alert.alert('Login Failed', error.message)
       console.error(error)
@@ -58,7 +121,7 @@ const Login = ({ navigation }) => {
       </TouchableOpacity>
 
       {/* We navigate to the 'Signup' route name defined in your navigator. */}
-      <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+      <TouchableOpacity onPress={() => navigation.navigate('Signup', { userRole })}>
         <Text style={styles.link}>Don't have an account? Sign Up</Text>
       </TouchableOpacity>
     </View>
