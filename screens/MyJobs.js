@@ -47,7 +47,7 @@ const MyJobs = () => {
         contractorEarnings: 17.50,
         location: {
           address: '123 Main St, Atlanta, GA 30309',
-          coordinates: { lat: 33.7490, lng: -84.3880 }
+          coordinates: { latitude: 33.7490, longitude: -84.3880 }
         },
         scheduledTime: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
         acceptedAt: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
@@ -67,7 +67,7 @@ const MyJobs = () => {
         contractorEarnings: 31.50,
         location: {
           address: '456 Oak Ave, Marietta, GA 30060',
-          coordinates: { lat: 33.9526, lng: -84.5499 }
+          coordinates: { latitude: 33.9526, longitude: -84.5499 }
         },
         scheduledTime: new Date(Date.now() - 24 * 60 * 60 * 1000), // yesterday
         acceptedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
@@ -89,7 +89,7 @@ const MyJobs = () => {
         contractorEarnings: 24.50,
         location: {
           address: '789 Pine St, Sandy Springs, GA 30328',
-          coordinates: { lat: 33.9304, lng: -84.3733 }
+          coordinates: { latitude: 33.9304, longitude: -84.3733 }
         },
         scheduledTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // tomorrow
         acceptedAt: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
+import Logo from '../components/Logo';
 
 const About = () => {
   const handleContactPress = (type) => {
@@ -35,12 +36,7 @@ const About = () => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* App Logo and Info */}
         <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <View style={styles.logoBackground}>
-              <Text style={styles.logoText}>QT</Text>
-            </View>
-            <View style={styles.logoGlow} />
-          </View>
+          <Logo size="large" showText={false} style={styles.logoContainer} />
           <Text style={styles.appName}>QuickTrash</Text>
           <Text style={styles.version}>Version 1.0.0 (Build 100)</Text>
           <Text style={styles.tagline}>On-demand trash pickup when you need it</Text>
@@ -209,33 +205,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
   },
   logoContainer: {
-    position: 'relative',
     marginBottom: 20,
-  },
-  logoBackground: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#34A853',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  logoGlow: {
-    position: 'absolute',
-    top: 2,
-    left: 2,
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: '#34A853',
-    opacity: 0.3,
-    zIndex: 1,
-  },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: '900',
   },
   appName: {
     fontSize: 28,
