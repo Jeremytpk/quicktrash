@@ -13,6 +13,7 @@ import { auth, db } from '../firebaseConfig'
 import { useUser } from '../contexts/UserContext'
 import LocationService from '../services/LocationService'
 
+
 // This prop is automatically passed by React Navigation to screen components.
 const Login = ({ navigation, route }) => {
   const [email, setEmail] = useState('')
@@ -71,6 +72,7 @@ const Login = ({ navigation, route }) => {
                 {
                   text: 'Retry',
                   onPress: async () => {
+
                     const retryPermission = await LocationService.requestPermissions(userCredential.user.uid, false)
                     if (retryPermission) {
                       navigation.navigate('ContractorDashboard')
@@ -78,6 +80,7 @@ const Login = ({ navigation, route }) => {
                   }
                 },
                 {
+
                   text: 'Cancel',
                   style: 'cancel',
                   onPress: () => {
@@ -97,8 +100,8 @@ const Login = ({ navigation, route }) => {
           navigation.navigate('CustomerDashboard')
       }
     } catch (error) {
-      Alert.alert('Login Failed', error.message)
-      console.error(error)
+      Alert.alert('Login Failed', error.message);
+      console.error(error);
     }
   }
 
@@ -127,6 +130,7 @@ const Login = ({ navigation, route }) => {
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Log In</Text>
       </TouchableOpacity>
+
 
       {/* We navigate to the 'Signup' route name defined in your navigator. */}
       <TouchableOpacity onPress={() => navigation.navigate('Signup', { userRole })}>
