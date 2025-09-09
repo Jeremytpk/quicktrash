@@ -42,7 +42,7 @@ function App() {
   return (
     <UserProvider>
       <NavigationContainer>
-        <Stack.Navigator initialRouteName="RoleSelection">
+        <Stack.Navigator initialRouteName="Login">
           <Stack.Screen 
             name="FirebaseTest" 
             component={FirebaseTest} 
