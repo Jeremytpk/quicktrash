@@ -6,18 +6,22 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Image,
 } from 'react-native'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../firebaseConfig'
 import { useUser } from '../contexts/UserContext'
 import LocationService from '../services/LocationService'
+import QuickTrashLogo from '../assets/logo/qt_logo_vide.png';
+import { Ionicons } from '@expo/vector-icons';
 
 
 // This prop is automatically passed by React Navigation to screen components.
 const Login = ({ navigation, route }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordVisible, setPasswordVisible] = useState(false); // New state for password visibility
   const userRole = route.params?.userRole || 'customer'
   const { setUserRole } = useUser()
 
@@ -40,65 +44,18 @@ const Login = ({ navigation, route }) => {
         isActive: true,
       }, { merge: true })
       
-      // Set role in context
-      setUserRole(userRole)
-      
-      // Check if this is the user's first login
-      const isFirstTime = await LocationService.isFirstTimeLocationRequest(userCredential.user.uid)
-      
-      // Navigate to role-specific dashboard after successful login
+      // Navigate to the Transit component after successful login
       Alert.alert('Login Successful', 'You have been signed in!')
       
       // Request location permission for all users on first login
+      const isFirstTime = await LocationService.isFirstTimeLocationRequest(userCredential.user.uid)
       if (isFirstTime) {
         await LocationService.requestPermissions(userCredential.user.uid, true)
       }
-      
-      // Navigate based on user role
-      switch (userRole) {
-        case 'customer':
-          navigation.navigate('CustomerDashboard')
-          break
-        case 'contractor':
-          // For contractors, location is mandatory - check again if needed
-          const hasLocationPermission = await LocationService.requestPermissions(userCredential.user.uid, false)
-          if (hasLocationPermission) {
-            navigation.navigate('ContractorDashboard')
-          } else {
-            Alert.alert(
-              'Location Required',
-              'Location access is mandatory for contractors to receive job assignments and provide navigation. Please enable location permissions.',
-              [
-                {
-                  text: 'Retry',
-                  onPress: async () => {
 
-                    const retryPermission = await LocationService.requestPermissions(userCredential.user.uid, false)
-                    if (retryPermission) {
-                      navigation.navigate('ContractorDashboard')
-                    }
-                  }
-                },
-                {
+      // Navigate to the central Transit component
+      navigation.navigate('Transit');
 
-                  text: 'Cancel',
-                  style: 'cancel',
-                  onPress: () => {
-                    // Logout the user if they don't grant permission
-                    auth.signOut()
-                    Alert.alert('Logged Out', 'You have been logged out. Location access is required for contractors.')
-                  }
-                }
-              ]
-            )
-          }
-          break
-        case 'employee':
-          navigation.navigate('EmployeeDashboard')
-          break
-        default:
-          navigation.navigate('CustomerDashboard')
-      }
     } catch (error) {
       Alert.alert('Login Failed', error.message);
       console.error(error);
@@ -107,8 +64,8 @@ const Login = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.subtitle1}>LOGIN</Text>
-      <Text style={styles.title}>"Quick"</Text>
+      <Image source={QuickTrashLogo} style={styles.logo} /> 
+      <Text style={styles.title}>LOGIN</Text>
       <Text style={styles.subtitle}>Welcome Back</Text>
       <TextInput
         style={styles.input}
@@ -119,21 +76,30 @@ const Login = ({ navigation, route }) => {
         keyboardType="email-address"
         placeholderTextColor="#999"
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        placeholderTextColor="#999"
-      />
+      <View style={styles.passwordContainer}> 
+        <TextInput
+          style={styles.passwordInput}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!passwordVisible}
+          placeholderTextColor="#999"
+        />
+        <TouchableOpacity
+          style={styles.eyeIcon}
+          onPress={() => setPasswordVisible(!passwordVisible)}
+        >
+          <Ionicons 
+            name={passwordVisible ? "eye" : "eye-off"}
+            size={24} 
+            color="#999" 
+          />
+        </TouchableOpacity>
+      </View>
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Log In</Text>
       </TouchableOpacity>
-
-
-      {/* We navigate to the 'Signup' route name defined in your navigator. */}
-      <TouchableOpacity onPress={() => navigation.navigate('Signup', { userRole })}>
+      <TouchableOpacity onPress={() => navigation.navigate('RoleSelection')}>
         <Text style={styles.link}>Don't have an account? Sign Up</Text>
       </TouchableOpacity>
     </View>
@@ -148,23 +114,23 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#f5f5f5',
   },
-  title: {
-    fontSize: 35,
-    fontWeight: 'bold',
+  logo: {
+    width: 200,
+    height: 200,
+    resizeMode: 'contain',
     marginBottom: 20,
+    borderRadius: 100,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    marginBottom: 10,
     color: '#333',
   },
   subtitle: {
-    fontSize: 25,
+    fontSize: 20,
     marginBottom: 10,
     color: '#555',
-  },
-  subtitle1: {
-    fontSize: 35,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    bottom: 90,
-    color: '#34A853',
   },
   input: {
     width: '100%',
@@ -176,6 +142,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     fontSize: 16,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    height: 50,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  passwordInput: {
+    flex: 1,
+    height: '100%',
+    paddingHorizontal: 15,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    padding: 10,
   },
   button: {
     width: '100%',

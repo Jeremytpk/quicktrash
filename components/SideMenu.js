@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import React from 'react';
-=======
 import React, { useEffect, useRef } from 'react';
->>>>>>> 60a5c7d (Fix: Corrected)
 import {
   View,
   Text,
@@ -12,12 +8,9 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
-<<<<<<< HEAD
-=======
   Animated,
   Dimensions,
   Pressable,
->>>>>>> 60a5c7d (Fix: Corrected)
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -26,29 +19,24 @@ import Logo from './Logo';
 import { auth } from '../firebaseConfig';
 import { signOut } from 'firebase/auth';
 
-<<<<<<< HEAD
-=======
 const { width } = Dimensions.get('window');
 const menuWidth = 320;
 
->>>>>>> 60a5c7d (Fix: Corrected)
 const SideMenu = ({ visible, onClose }) => {
   const navigation = useNavigation();
   const { user, userRole, setUserRole } = useUser();
 
-<<<<<<< HEAD
-=======
-  // --- NEW: Animation values for slide and fade effects ---
+  // Animation values for the slide and overlay fade
   const slideAnim = useRef(new Animated.Value(width)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // --- NEW: Trigger animations when visibility changes ---
+  // Trigger animations when the menu's visibility changes
   useEffect(() => {
     if (visible) {
       // Animate In
       Animated.parallel([
         Animated.timing(slideAnim, {
-          toValue: width - menuWidth, // Slide menu into view
+          toValue: width - menuWidth, // Slide menu into view from the right
           duration: 300,
           useNativeDriver: true,
         }),
@@ -61,11 +49,11 @@ const SideMenu = ({ visible, onClose }) => {
     }
   }, [visible, slideAnim, fadeAnim]);
 
-  // --- NEW: Handle the closing animation ---
+  // Handle the closing animation
   const handleClose = () => {
     Animated.parallel([
       Animated.timing(slideAnim, {
-        toValue: width, // Slide menu out of view
+        toValue: width, // Slide menu out of view to the right
         duration: 300,
         useNativeDriver: true,
       }),
@@ -77,23 +65,14 @@ const SideMenu = ({ visible, onClose }) => {
     ]).start(() => onClose()); // Call the original onClose prop after animation finishes
   };
 
-
->>>>>>> 60a5c7d (Fix: Corrected)
   const handleLogout = async () => {
     try {
       await signOut(auth);
       setUserRole(null);
-<<<<<<< HEAD
-      onClose();
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'RoleSelection' }],
-=======
       handleClose(); // Use animated close
       navigation.reset({
         index: 0,
         routes: [{ name: 'Login' }],
->>>>>>> 60a5c7d (Fix: Corrected)
       });
     } catch (error) {
       Alert.alert('Error', 'Failed to logout. Please try again.');
@@ -101,12 +80,6 @@ const SideMenu = ({ visible, onClose }) => {
   };
 
   const handleNavigation = (screenName) => {
-<<<<<<< HEAD
-    onClose();
-    navigation.navigate(screenName);
-  };
-
-=======
     handleClose(); // Use animated close
     // A slight delay ensures the animation is smooth before navigating
     setTimeout(() => {
@@ -115,7 +88,6 @@ const SideMenu = ({ visible, onClose }) => {
   };
 
   // --- Menu structure logic remains the same ---
->>>>>>> 60a5c7d (Fix: Corrected)
   const getMenuSections = () => {
     switch (userRole) {
       case 'customer':
@@ -225,26 +197,17 @@ const SideMenu = ({ visible, onClose }) => {
     <Modal
       visible={visible}
       transparent={true}
-<<<<<<< HEAD
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
-        <TouchableOpacity style={styles.overlayTouch} onPress={onClose} />
-        
-        <View style={styles.menuContainer}>
-=======
-      animationType="none" // --- MODIFIED: We use custom animations now ---
+      animationType="none" // We use our custom animations now
       onRequestClose={handleClose}
     >
-      {/* --- MODIFIED: Layout restructured for right-slide animation --- */}
       <View style={styles.modalContainer}>
+        {/* Fading overlay */}
         <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
         </Animated.View>
         
+        {/* Sliding menu */}
         <Animated.View style={[styles.menuContainer, { transform: [{ translateX: slideAnim }] }]}>
->>>>>>> 60a5c7d (Fix: Corrected)
           <SafeAreaView style={styles.safeArea}>
             {/* Header */}
             <View style={styles.header}>
@@ -260,11 +223,7 @@ const SideMenu = ({ visible, onClose }) => {
                 </View>
               </View>
               
-<<<<<<< HEAD
-              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-=======
               <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
->>>>>>> 60a5c7d (Fix: Corrected)
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
@@ -338,39 +297,13 @@ const SideMenu = ({ visible, onClose }) => {
               <Text style={styles.versionText}>Version 1.0.0</Text>
             </View>
           </SafeAreaView>
-<<<<<<< HEAD
-        </View>
-=======
         </Animated.View>
->>>>>>> 60a5c7d (Fix: Corrected)
       </View>
     </Modal>
   );
 };
 
-<<<<<<< HEAD
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    flexDirection: 'row',
-  },
-  overlayTouch: {
-    flex: 1,
-  },
-  menuContainer: {
-    width: 320,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: -2,
-      height: 0,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 10,
-=======
-// --- MODIFIED: Styles updated to support the new animation layout ---
+// Styles updated to support the new animation layout
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
@@ -388,7 +321,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 20,
->>>>>>> 60a5c7d (Fix: Corrected)
   },
   safeArea: {
     flex: 1,
@@ -405,23 +337,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-<<<<<<< HEAD
-  logoBackground: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#34A853',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-=======
->>>>>>> 60a5c7d (Fix: Corrected)
   userInfo: {
     flex: 1,
   },
@@ -471,15 +386,6 @@ const styles = StyleSheet.create({
     marginLeft: 16,
     fontWeight: '500',
   },
-<<<<<<< HEAD
-  separator: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 16,
-    marginHorizontal: 12,
-  },
-=======
->>>>>>> 60a5c7d (Fix: Corrected)
   footer: {
     padding: 20,
     borderTopWidth: 1,

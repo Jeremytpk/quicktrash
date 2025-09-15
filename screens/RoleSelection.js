@@ -30,12 +30,12 @@ const RoleSelection = ({ navigation }) => {
         
         <TouchableOpacity
           style={[styles.roleButton, styles.customerButton]}
-          onPress={() => navigateToAuth('customer')}
+          onPress={() => navigation.navigate('Signup')}
         >
           <View style={styles.buttonContent}>
             <Ionicons name="home" size={32} color="#FFFFFF" />
             <View style={styles.buttonText}>
-              <Text style={styles.buttonTitle}>Get Trash Picked Up</Text>
+              <Text style={styles.buttonTitle}>QuickTrash Client</Text>
               <Text style={styles.buttonSubtitle}>Request on-demand pickup service</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
@@ -44,7 +44,7 @@ const RoleSelection = ({ navigation }) => {
 
         <TouchableOpacity
           style={[styles.roleButton, styles.contractorButton]}
-          onPress={() => navigateToAuth('contractor')}
+          onPress={() => navigation.navigate('SignupDriver')}
         >
           <View style={styles.buttonContent}>
             <Ionicons name="car" size={32} color="#FFFFFF" />
