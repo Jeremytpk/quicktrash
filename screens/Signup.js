@@ -1,24 +1,57 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  Image,
+} from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../firebaseConfig'; // Import the auth object
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../firebaseConfig';
+import QuickTrashLogo from '../assets/logo/qt_logo_vide.png';
+import { Ionicons } from '@expo/vector-icons';
 
-const Signup = () => {
+// Add the 'navigation' and 'route' props
+const Signup = ({ navigation, route }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false); // New state for password visibility
+  // Get the userRole from the route params, defaulting to 'customer'
+  const userRole = route.params?.userRole || 'customer';
 
   const handleSignup = async () => {
     try {
-      // Use createUserWithEmailAndPassword from Firebase Auth
-      await createUserWithEmailAndPassword(auth, email, password);
-      // If signup is successful, you can navigate to another screen.
-      // For now, we'll just show a success message.
-      Alert.alert('Signup Successful', 'Your account has been created!');
-      // Clear the input fields
+      if (!email || !password) {
+        Alert.alert('Error', 'Please enter both email and password.');
+        return;
+      }
+      
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+      // Create a document for the new user in Firestore, including their role
+      const userRef = doc(db, 'users', userCredential.user.uid);
+      await setDoc(userRef, {
+        email: userCredential.user.email,
+        displayName: userCredential.user.displayName || email.split('@')[0],
+        role: userRole,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        isActive: true,
+      });
+
+      Alert.alert('Signup Successful', 'Your account has been created! Please log in.');
+      
+      // Navigate to the Login screen, passing the user role
+      navigation.navigate('Login', { userRole });
+
+      // Clear the input fields after successful signup
       setEmail('');
       setPassword('');
+      
     } catch (error) {
-      // Handle errors (e.g., email already in use, weak password)
       Alert.alert('Signup Failed', error.message);
       console.error(error);
     }
@@ -26,8 +59,9 @@ const Signup = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>"Quick"</Text>
-      <Text style={styles.subtitle}>Sign Up</Text>
+      <Image source={QuickTrashLogo} style={styles.logo} />
+      <Text style={styles.title}>SIGN UP</Text>
+      <Text style={styles.subtitle}>Join Us</Text>
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -35,19 +69,32 @@ const Signup = () => {
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
+        placeholderTextColor="#999"
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+      <View style={styles.passwordContainer}> 
+        <TextInput
+          style={styles.passwordInput}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!passwordVisible} // Conditionally set secureTextEntry
+          placeholderTextColor="#999"
+        />
+        <TouchableOpacity
+          style={styles.eyeIcon}
+          onPress={() => setPasswordVisible(!passwordVisible)} // Toggle visibility
+        >
+          <Ionicons 
+            name={passwordVisible ? "eye" : "eye-off"} // Change icon based on state
+            size={24} 
+            color="#999" 
+          />
+        </TouchableOpacity>
+      </View>
       <TouchableOpacity style={styles.button} onPress={handleSignup}>
         <Text style={styles.buttonText}>Sign Up</Text>
       </TouchableOpacity>
-      {/* You can add a link to the login page here */}
-      <TouchableOpacity onPress={() => console.log('Navigate to Login')}>
+      <TouchableOpacity onPress={() => navigation.navigate('Login', { userRole })}>
         <Text style={styles.link}>Already have an account? Log In</Text>
       </TouchableOpacity>
     </View>
@@ -62,15 +109,23 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#f5f5f5',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+  logo: {
+    width: 200,
+    height: 200,
+    resizeMode: 'contain',
     marginBottom: 20,
+    borderRadius: 100,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
   },
   subtitle: {
-    fontSize: 25,
-    //fontWeight: 'bold',
-    marginBottom: 20,
+    fontSize: 20,
+    marginBottom: 10,
+    color: '#555',
   },
   input: {
     width: '100%',
@@ -81,6 +136,27 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderWidth: 1,
     borderColor: '#ddd',
+    fontSize: 16,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    height: 50,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  passwordInput: {
+    flex: 1,
+    height: '100%',
+    paddingHorizontal: 15,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    padding: 10,
   },
   button: {
     width: '100%',
@@ -90,6 +166,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   buttonText: {
     color: '#fff',
@@ -97,9 +181,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   link: {
-    marginTop: 10,
+    marginTop: 15,
     color: '#34A853',
     fontWeight: 'bold',
+    fontSize: 16,
   },
 });
 

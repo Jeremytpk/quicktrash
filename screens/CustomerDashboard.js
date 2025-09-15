@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
-import OrderBasket from '../components/OrderBasket';
+// import OrderBasket from '../components/OrderBasket'; // Removed OrderBasket
 import LocationService from '../services/LocationService';
 
 const { width } = Dimensions.get('window');
@@ -70,7 +70,10 @@ const CustomerDashboard = ({ navigation }) => {
         showBackButton={false}
         rightComponent={
           <View style={styles.headerActions}>
-            <OrderBasket />
+            {/* Replaced OrderBasket with a recycling icon */}
+            <TouchableOpacity style={styles.recyclingButton}>
+              <Ionicons name="trash-bin-outline" size={24} color="#333" /> 
+            </TouchableOpacity>
             <TouchableOpacity style={styles.notificationButton}>
               <Ionicons name="notifications-outline" size={24} color="#333" />
             </TouchableOpacity>
@@ -185,6 +188,10 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  // Added new style for recycling button
+  recyclingButton: { 
+    padding: 8,
   },
   notificationButton: {
     padding: 8,

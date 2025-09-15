@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
+import { View, ActivityIndicator, StyleSheet } from 'react-native'; // Import necessary components for loading state
 
 const UserContext = createContext();
 
@@ -66,14 +67,28 @@ export const UserProvider = ({ children }) => {
     userRole,
     loading,
     getHomeDashboard,
-    setUserRole, // Allow manual role setting during registration
+    setUserRole,
   };
 
   return (
     <UserContext.Provider value={value}>
-      {children}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#34A853" />
+        </View>
+      ) : (
+        children
+      )}
     </UserContext.Provider>
   );
 };
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
 
 export default UserContext;

@@ -2,9 +2,12 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { UserProvider } from './contexts/UserContext';
+
+// Screens & Components
 import RoleSelection from './screens/RoleSelection';
 import Login from './screens/Login';
 import Signup from './screens/Signup';
+import Transit from './screens/Transit'; 
 import CustomerDashboard from './screens/CustomerDashboard';
 import ContractorDashboard from './screens/ContractorDashboard';
 import EmployeeDashboard from './screens/EmployeeDashboard';
@@ -34,6 +37,7 @@ import SafetyToolkit from './screens/SafetyToolkit';
 
 // Employee screens
 import UserManagement from './screens/UserManagement';
+import SignupDriver from './screens/SignupDriver';
 
 // Create the stack navigator
 const Stack = createNativeStackNavigator();
@@ -42,7 +46,7 @@ function App() {
   return (
     <UserProvider>
       <NavigationContainer>
-        <Stack.Navigator initialRouteName="RoleSelection">
+        <Stack.Navigator initialRouteName="Transit">
           <Stack.Screen 
             name="FirebaseTest" 
             component={FirebaseTest} 
@@ -51,7 +55,7 @@ function App() {
           <Stack.Screen 
             name="RoleSelection" 
             component={RoleSelection} 
-            options={{ headerShown: false }} 
+            options={{ title: '' }} 
           />
           <Stack.Screen 
             name="Login" 
@@ -62,6 +66,16 @@ function App() {
             name="Signup" 
             component={Signup} 
             options={{ title: 'Sign Up', headerTitleAlign: 'center' }} 
+          />
+          <Stack.Screen 
+            name="SignupDriver" 
+            component={SignupDriver} 
+            options={{ title: "", headerTitleAlign: 'center' }} 
+          />
+          <Stack.Screen
+            name="Transit"
+            component={Transit}
+            options={{ headerShown: false }}
           />
           <Stack.Screen 
             name="CustomerDashboard" 
