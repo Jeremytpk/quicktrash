@@ -18,27 +18,25 @@ const Transit = ({ navigation }) => {
 
           if (userDocSnap.exists()) {
             const userData = userDocSnap.data();
-            const userRole = userData.role;
+            const { isCustomer, isContractor, isEmployee } = userData;
 
-            // Set the user role in the global context
-            setUserRole(userRole);
-
-            // Navigate to the appropriate dashboard based on the user's role
-            switch (userRole) {
-              case 'customer':
-                navigation.replace('CustomerDashboard');
-                break;
-              case 'contractor':
-                navigation.replace('ContractorDashboard');
-                break;
-              case 'employee':
-                navigation.replace('EmployeeDashboard');
-                break;
-              default:
-                navigation.replace('CustomerDashboard');
+            // Set the role in the global context based on the flags
+            if (isEmployee) {
+              setUserRole('employee');
+              navigation.replace('EmployeeDashboard');
+            } else if (isContractor) {
+              setUserRole('contractor');
+              navigation.replace('ContractorDashboard');
+            } else if (isCustomer) {
+              setUserRole('customer');
+              navigation.replace('CustomerDashboard');
+            } else {
+              // Default to customer dashboard if no role is explicitly set
+              setUserRole('customer');
+              navigation.replace('CustomerDashboard');
             }
+
           } else {
-            // Document doesn't exist, maybe redirect to a signup or error screen
             console.error("User document not found in Firestore!");
             navigation.replace('Login');
           }
@@ -47,7 +45,6 @@ const Transit = ({ navigation }) => {
           navigation.replace('Login');
         }
       } else {
-        // User is not authenticated, redirect to login
         navigation.replace('Login');
       }
     };

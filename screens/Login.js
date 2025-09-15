@@ -33,18 +33,31 @@ const Login = ({ navigation, route }) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       
-      // Store user role in Firestore if this is first login
-      const userRef = doc(db, 'users', userCredential.user.uid)
+      // Determine which boolean flag to set based on userRole
+      const roleFlags = {};
+      switch (userRole) {
+        case 'contractor':
+          roleFlags.isContractor = true;
+          break;
+        case 'employee':
+          roleFlags.isEmployee = true;
+          break;
+        default: // 'customer'
+          roleFlags.isCustomer = true;
+          break;
+      }
+
+      // Store user role flags in Firestore if this is the first login
+      const userRef = doc(db, 'users', userCredential.user.uid);
       await setDoc(userRef, {
         email: userCredential.user.email,
         displayName: userCredential.user.displayName || email.split('@')[0],
-        role: userRole,
+        ...roleFlags, // Spread the role flags into the document
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         isActive: true,
-      }, { merge: true })
+      }, { merge: true });
       
-      // Navigate to the Transit component after successful login
       Alert.alert('Login Successful', 'You have been signed in!')
       
       // Request location permission for all users on first login

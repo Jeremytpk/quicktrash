@@ -56,10 +56,12 @@ const RoleSelection = ({ navigation }) => {
           </View>
         </TouchableOpacity>
 
+        {/*
         <TouchableOpacity
           style={[styles.roleButton, styles.employeeButton]}
           onPress={() => navigateToAuth('employee')}
         >
+        
           <View style={styles.buttonContent}>
             <Ionicons name="business" size={32} color="#FFFFFF" />
             <View style={styles.buttonText}>
@@ -69,7 +71,9 @@ const RoleSelection = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={24} color="#FFFFFF" />
           </View>
         </TouchableOpacity>
+        */}
       </View>
+      
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>
