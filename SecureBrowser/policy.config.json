@@ -1,0 +1,25 @@
+diff --git a//dev/null b/SecureBrowser/policy.config.json
+index 0000000000000000000000000000000000000000..07492c28bb2badc5824ca2c6a46d3a7af289bc08 100644
+--- a//dev/null
++++ b/SecureBrowser/policy.config.json
+@@ -0,0 +1,20 @@
++[
++    {
++        "Type": "Registry",
++        "Path": "HKLM:\Software\SecureBrowser\Policies",
++        "Name": "DisablePopups",
++        "Value": 1,
++        "ValueType": "DWord"
++    },
++    {
++        "Type": "Registry",
++        "Path": "HKLM:\Software\SecureBrowser\Policies",
++        "Name": "TrustedSites",
++        "Value": "https://intranet.example.com;https://portal.example.com",
++        "ValueType": "String"
++    },
++    {
++        "Type": "ExtensionBlocklist",
++        "ExtensionId": "abcd1234"
++    }
++]
