@@ -1,0 +1,60 @@
+{
+  "name": "africa-intelligence-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Africa Intelligence Platform",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^14.0.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@tanstack/react-query": "^5.8.4",
+    "axios": "^1.6.2",
+    "zustand": "^4.4.7",
+    "@headlessui/react": "^1.7.17",
+    "@heroicons/react": "^2.0.18",
+    "clsx": "^2.0.0",
+    "tailwindcss": "^3.3.6",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "framer-motion": "^10.16.5",
+    "react-hot-toast": "^2.4.1",
+    "react-hook-form": "^7.47.0",
+    "@hookform/resolvers": "^3.3.2",
+    "zod": "^3.22.4",
+    "date-fns": "^2.30.0",
+    "react-intersection-observer": "^9.5.3",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "lucide-react": "^0.294.0",
+    "@react-google-maps/api": "^2.19.2",
+    "@types/google.maps": "^3.54.10"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.2",
+    "@types/react": "^18.2.38",
+    "@types/react-dom": "^18.2.17",
+    "typescript": "^5.3.2",
+    "eslint": "^8.54.0",
+    "eslint-config-next": "^14.0.3",
+    "@typescript-eslint/eslint-plugin": "^6.12.0",
+    "@typescript-eslint/parser": "^6.12.0",
+    "prettier": "^3.1.0",
+    "prettier-plugin-tailwindcss": "^0.5.7"
+  },
+  "keywords": [
+    "africa",
+    "intelligence",
+    "news",
+    "ai",
+    "platform"
+  ],
+  "author": "Africa Intelligence Platform Team",
+  "license": "MIT"
+}
