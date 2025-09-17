@@ -1,6 +1,13 @@
+# my_projects
+All projects. Personnel and Business related
+
+#This repository now includes the **Secure Browser Deployment & Policy Automation** project located in the `SecureBrowser` folder.
+
+---
+
 # QuickTrash - On-Demand Waste Management Platform
 
-QuickTrash is a comprehensive cross-platform mobile application that revolutionizes the trash pickup industry by connecting customers needing immediate waste removal with a network of vetted independent contractors ("Pickers"). Built with React Native and Expo SDK 53, the app supports three distinct user roles in a single, unified application.
+QuickTrash is a comprehensive cross-platform mobile application that revolutionizes the trash pickup industry by connecting customers needing immediate waste removal with a network of vetted independent contractors ("Pickers"). Built with React Native and Expo SDK 53, the app supports three distinct user roles in a single, unified application.                                                                     
 
 ## 🚀 Features
 
@@ -21,7 +28,7 @@ QuickTrash is a comprehensive cross-platform mobile application that revolutioni
 - ✅ **GPS location services** for accurate pickup addresses
 - ✅ **Comprehensive Rating System** with star ratings and text feedback
 - ✅ **Rating Dashboard** to view personal scores and improvement tips
-- 🔄 Real-time tracking of assigned contractor
+- �� Real-time tracking of assigned contractor
 - 🔄 Secure chat with contractors
 - 🔄 Payment processing (Stripe integration)
 - 🔄 Order history and rewards system
@@ -180,8 +187,8 @@ ratings: {
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/Jeremytpk/QuickTrash.git
-   cd QuickTrash
+   git clone https://github.com/Atouba64/my_projects.git
+   cd my_projects/QT/Tests/QuickTrash
    ```
 
 2. **Install dependencies**

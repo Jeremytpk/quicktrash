@@ -1,0 +1,16 @@
+name: Deploy Secure Browser
+on:
+  workflow_dispatch:        # creates a “Run workflow” button in the Actions tab
+jobs:
+  deploy:
+    runs-on: windows-latest # runs on a Windows GitHub runner
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Execute deployment
+        run: |
+          python SecureBrowser/Deploy-SecureBrowser.py \
+            --policy-file SecureBrowser/policy.config.json
