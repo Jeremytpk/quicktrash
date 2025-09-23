@@ -30,6 +30,7 @@ const ContractorDashboard = ({ navigation }) => {
   const [locationPermission, setLocationPermission] = useState(false);
   const [route, setRoute] = useState(null);
   const [nearbyJobs, setNearbyJobs] = useState([]);
+  const [locationPolling, setLocationPolling] = useState(null);
   
   // Animation for pulsing location icon
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -158,8 +159,11 @@ const ContractorDashboard = ({ navigation }) => {
     initializeLocation();
     return () => {
       LocationService.stopWatching();
+      if (locationPolling) {
+        clearInterval(locationPolling);
+      }
     };
-  }, []);
+  }, [locationPolling]);
 
   // Start pulsing animation for location icon and rings
   useEffect(() => {
@@ -286,9 +290,25 @@ const ContractorDashboard = ({ navigation }) => {
           setCurrentLocation(location);
         });
 
-        // Start watching location changes for real-time updates
+        // Start watching location changes for real-time updates with high frequency
         await LocationService.startWatching();
-        console.log('👀 Location watching started');
+        console.log('👀 Real-time location watching started');
+        
+        // Set up additional location polling for more frequent updates
+        const locationPolling = setInterval(async () => {
+          try {
+            const freshLocation = await LocationService.getCurrentLocation();
+            if (freshLocation) {
+              console.log('📍 Polling location update:', freshLocation);
+              setCurrentLocation(freshLocation);
+            }
+          } catch (error) {
+            console.log('❌ Location polling error:', error);
+          }
+        }, 5000); // Update every 5 seconds
+        
+        // Store polling interval for cleanup
+        setLocationPolling(locationPolling);
       } else {
         console.log('❌ Location permission denied');
         Alert.alert(
@@ -450,6 +470,9 @@ const ContractorDashboard = ({ navigation }) => {
                     setCurrentLocation(newLocation);
                     console.log('📍 Real-time location update:', newLocation);
                     console.log('📍 Map should now center on:', newLocation.latitude, newLocation.longitude);
+                    
+                    // Update nearby jobs when location changes
+                    updateNearbyJobs();
                   }
                 }}
                 onMapReady={() => {
@@ -459,19 +482,28 @@ const ContractorDashboard = ({ navigation }) => {
                   console.log('🗺️ Map region changed:', region);
                 }}
               >
-                {/* Current location marker with accuracy circle */}
+                {/* Real-time location tracking */}
                 {currentLocation && (
                   <>
+                    {/* Main location marker */}
                     <Marker
                       coordinate={{
                         latitude: currentLocation.latitude,
                         longitude: currentLocation.longitude,
                       }}
-                      title="Your Location"
-                      description={`Accuracy: ${currentLocation.accuracy ? `${currentLocation.accuracy.toFixed(0)}m` : 'Unknown'}`}
-                      pinColor={MAPS_CONFIG.MARKERS.CONTRACTOR.color}
-                    />
-                    {/* Accuracy circle */}
+                      title="Your Live Location"
+                      description={`GPS Active • Accuracy: ${currentLocation.accuracy ? `${currentLocation.accuracy.toFixed(0)}m` : 'Unknown'} • Updated: ${new Date(currentLocation.timestamp).toLocaleTimeString()}`}
+                      pinColor="#34A853"
+                    >
+                      <View style={styles.liveLocationMarker}>
+                        <View style={styles.liveLocationIcon}>
+                          <Ionicons name="location" size={16} color="#FFFFFF" />
+                        </View>
+                        <View style={styles.liveLocationPulse} />
+                      </View>
+                    </Marker>
+                    
+                    {/* Accuracy circle with pulsing effect */}
                     {currentLocation.accuracy && (
                       <Circle
                         center={{
@@ -479,10 +511,36 @@ const ContractorDashboard = ({ navigation }) => {
                           longitude: currentLocation.longitude,
                         }}
                         radius={currentLocation.accuracy}
-                        strokeColor="rgba(52, 168, 83, 0.3)"
-                        fillColor="rgba(52, 168, 83, 0.1)"
-                        strokeWidth={2}
+                        strokeColor="rgba(52, 168, 83, 0.6)"
+                        fillColor="rgba(52, 168, 83, 0.15)"
+                        strokeWidth={3}
                       />
+                    )}
+                    
+                    {/* Additional accuracy rings for better visualization */}
+                    {currentLocation.accuracy && (
+                      <>
+                        <Circle
+                          center={{
+                            latitude: currentLocation.latitude,
+                            longitude: currentLocation.longitude,
+                          }}
+                          radius={currentLocation.accuracy * 0.5}
+                          strokeColor="rgba(52, 168, 83, 0.4)"
+                          fillColor="rgba(52, 168, 83, 0.05)"
+                          strokeWidth={2}
+                        />
+                        <Circle
+                          center={{
+                            latitude: currentLocation.latitude,
+                            longitude: currentLocation.longitude,
+                          }}
+                          radius={currentLocation.accuracy * 1.5}
+                          strokeColor="rgba(52, 168, 83, 0.2)"
+                          fillColor="rgba(52, 168, 83, 0.02)"
+                          strokeWidth={1}
+                        />
+                      </>
                     )}
                   </>
                 )}
@@ -511,52 +569,6 @@ const ContractorDashboard = ({ navigation }) => {
               </MapView>
             )}
             
-            {/* Real-time Location Display */}
-            {locationPermission && currentLocation && (
-              <View style={styles.locationStatusOverlay}>
-                <View style={styles.realtimeLocationCard}>
-                  <View style={styles.locationHeader}>
-                    <View style={styles.locationIconContainer}>
-                      <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                        <Ionicons name="location" size={20} color="#34A853" />
-                      </Animated.View>
-                      <View style={styles.locationPulse} />
-                    </View>
-                    <View style={styles.locationInfo}>
-                      <Text style={styles.locationTitle}>Live Location</Text>
-                      <Text style={styles.locationSubtitle}>GPS Tracking Active</Text>
-                    </View>
-                    <View style={styles.locationStatusIndicator}>
-                      <View style={styles.statusDot} />
-                      <Text style={styles.statusText}>LIVE</Text>
-                    </View>
-                  </View>
-                  
-                  {/* Visual Location Display */}
-                  <View style={styles.visualLocationContainer}>
-                    <View style={styles.locationVisualization}>
-                      <View style={styles.gpsIndicator}>
-                        <View style={styles.gpsCenter}>
-                          <Ionicons name="location" size={16} color="#FFFFFF" />
-                        </View>
-                        <Animated.View style={[styles.gpsRing1, { transform: [{ scale: ringAnim1 }] }]} />
-                        <Animated.View style={[styles.gpsRing2, { transform: [{ scale: ringAnim2 }] }]} />
-                        <Animated.View style={[styles.gpsRing3, { transform: [{ scale: ringAnim3 }] }]} />
-                      </View>
-                      <View style={styles.locationInfo}>
-                        <Text style={styles.locationLabel}>Current Position</Text>
-                        <Text style={styles.accuracyText}>
-                          Accuracy: {currentLocation.accuracy ? `${currentLocation.accuracy.toFixed(0)}m` : 'Unknown'}
-                        </Text>
-                        <Text style={styles.updateTime}>
-                          Updated: {new Date(currentLocation.timestamp).toLocaleTimeString()}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            )}
           </View>
         </View>
 
@@ -1052,6 +1064,35 @@ const styles = StyleSheet.create({
   updateTime: {
     fontSize: 11,
     color: '#9CA3AF',
+  },
+  liveLocationMarker: {
+    position: 'relative',
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  liveLocationIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#34A853',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+    zIndex: 2,
+  },
+  liveLocationPulse: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(52, 168, 83, 0.3)',
+    zIndex: 1,
   },
   modalContainer: {
     flex: 1,
