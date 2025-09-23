@@ -4,7 +4,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 class LocationService {
   constructor() {
-
     // Default to Atlanta, GA coordinates
     this.currentLocation = {
       latitude: 33.7490,
@@ -27,7 +26,6 @@ class LocationService {
       return true;
     }
   }
-
 
   // Mark that location has been requested for a user
   async markLocationRequested(userId) {
@@ -53,7 +51,7 @@ class LocationService {
           message,
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: isFirstTime ? 'Allow Location' : 'Open Settings', onPress: () => Location.requestForegroundPermissionsAsync() }
+            { text: isFirstTime ? 'Allow Location' : 'Open Settings', onPress: () => Linking.openSettings() }
           ]
         );
         return false;
@@ -65,14 +63,13 @@ class LocationService {
       }
       // For contractors, we also need background location for job tracking
       const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-      if (backgroundStatus !== 'granted') {
+      if (backgroundStatus !== 'granted' && Platform.OS === 'ios') {
         Alert.alert(
           'Background Location Required',
           'To track your progress during pickups and provide accurate ETAs to customers, QuickTrash needs background location access.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Allow', onPress: () => Location.requestBackgroundPermissionsAsync() }
-
+            { text: 'Allow', onPress: () => Linking.openSettings() }
           ]
         );
       }
@@ -200,13 +197,13 @@ class LocationService {
     if (!currentLocation) return [];
 
     return jobs.filter(job => {
-      if (!job.location?.coordinates) return false;
+      if (!job.pickupAddress?.coordinates) return false;
       
       const distance = this.calculateDistance(
         currentLocation.latitude,
         currentLocation.longitude,
-        job.location.coordinates.lat,
-        job.location.coordinates.lng
+        job.pickupAddress.coordinates.latitude,
+        job.pickupAddress.coordinates.longitude
       );
 
       return distance <= maxDistance;
@@ -215,8 +212,8 @@ class LocationService {
       distance: this.calculateDistance(
         currentLocation.latitude,
         currentLocation.longitude,
-        job.location.coordinates.lat,
-        job.location.coordinates.lng
+        job.pickupAddress.coordinates.latitude,
+        job.pickupAddress.coordinates.longitude
       )
     })).sort((a, b) => a.distance - b.distance);
   }
@@ -274,8 +271,7 @@ class LocationService {
       if (supported) {
         await Linking.openURL(url);
       } else {
-        // Fallback to web-based Google Maps
-        const webUrl = `https://www.google.com/maps/dir/${currentLocation.latitude},${currentLocation.longitude}/${destination.latitude},${destination.longitude}`;
+        const webUrl = `https://www.google.com/maps/dir/?api=1&origin=${currentLocation.latitude},${currentLocation.longitude}&destination=${destination.latitude},${destination.longitude}`;
         await Linking.openURL(webUrl);
       }
     } catch (error) {
