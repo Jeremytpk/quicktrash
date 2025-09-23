@@ -12,7 +12,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth'
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore' 
 import { auth, db } from '../firebaseConfig'
 import { useUser } from '../contexts/UserContext'
-import LocationService from '../services/LocationService'
+import EnhancedLocationService from '../services/EnhancedLocationService'
 
 const Login = ({ navigation }) => {
   const [email, setEmail] = useState('')
@@ -54,56 +54,92 @@ const Login = ({ navigation }) => {
       // Step 4: Set the verified role in the global context
       setUserRole(verifiedUserRole);
       
-      Alert.alert('Login Successful', 'You have been signed in!');
-      
-      // First-time location request logic remains the same
-      const isFirstTime = await LocationService.isFirstTimeLocationRequest(user.uid);
-      if (isFirstTime) {
-        await LocationService.requestPermissions(user.uid, true);
-      }
-      
-      // Step 5: Navigate based on the VERIFIED role from the database
-      switch (verifiedUserRole) {
-        case 'customer':
-          navigation.navigate('CustomerDashboard');
-          break;
-        case 'contractor':
-          const hasLocationPermission = await LocationService.requestPermissions(user.uid, false);
-          if (hasLocationPermission) {
-            navigation.navigate('ContractorDashboard');
-          } else {
-            Alert.alert(
-              'Location Required',
-              'Location access is mandatory for contractors. Please enable it in your device settings.',
-              [
-                {
-                  text: 'Retry',
-                  onPress: async () => {
-                    const retryPermission = await LocationService.requestPermissions(user.uid, false);
-                    if (retryPermission) {
-                      navigation.navigate('ContractorDashboard');
-                    }
+      // Request location permission and get current address BEFORE navigation
+      try {
+        console.log('Requesting location for user:', user.uid, 'role:', verifiedUserRole);
+        
+        // Show a more prominent location request
+        Alert.alert(
+          'Location Access Required',
+          'QuickTrash needs access to your location to show you nearby services and provide accurate estimates. This will only take a moment.',
+          [
+            {
+              text: 'Allow Location',
+              onPress: async () => {
+                try {
+                  const locationData = await EnhancedLocationService.requestLocationWithAddress(
+                    user.uid, 
+                    verifiedUserRole, 
+                    true // isFirstTime
+                  );
+                  
+                  console.log('Location data received:', locationData);
+                  
+                  // Update user document with location data if available
+                  if (locationData && locationData.address) {
+                    await updateDoc(userRef, {
+                      currentLocation: {
+                        coordinates: {
+                          lat: locationData.latitude,
+                          lng: locationData.longitude
+                        },
+                        address: locationData.address.formattedAddress,
+                        city: locationData.address.city,
+                        region: locationData.address.region,
+                        postalCode: locationData.address.postalCode,
+                        lastUpdated: serverTimestamp()
+                      }
+                    });
+                    console.log('Location data saved to Firestore');
                   }
-                },
-                {
-                  text: 'Cancel & Logout',
-                  style: 'destructive',
-                  onPress: () => auth.signOut(),
+                  
+                  // Navigate after location is handled
+                  navigateToDashboard(verifiedUserRole);
+                } catch (locationError) {
+                  console.error('Error getting location during login:', locationError);
+                  // Still navigate even if location fails
+                  navigateToDashboard(verifiedUserRole);
                 }
-              ]
-            );
-          }
-          break;
-        case 'employee':
-          navigation.navigate('EmployeeDashboard');
-          break;
-        default:
-          // Fallback to customer dashboard if role is unknown
-          navigation.navigate('CustomerDashboard');
+              }
+            },
+            {
+              text: 'Skip for Now',
+              style: 'cancel',
+              onPress: () => navigateToDashboard(verifiedUserRole)
+            }
+          ]
+        );
+      } catch (locationError) {
+        console.error('Error requesting location during login:', locationError);
+        // Navigate without location if there's an error
+        navigateToDashboard(verifiedUserRole);
       }
     } catch (error) {
       Alert.alert('Login Failed', error.message);
       console.error(error);
+    }
+  }
+
+  const navigateToDashboard = (userRole) => {
+    Alert.alert('Login Successful', 'You have been signed in!');
+    
+    // Step 5: Navigate based on the VERIFIED role from the database
+    switch (userRole) {
+      case 'customer':
+        navigation.navigate('CustomerDashboard');
+        break;
+      case 'contractor':
+        navigation.navigate('ContractorDashboard');
+        break;
+      case 'driver':
+        navigation.navigate('DashboardDriver');
+        break;
+      case 'employee':
+        navigation.navigate('EmployeeDashboard');
+        break;
+      default:
+        // Fallback to customer dashboard if role is unknown
+        navigation.navigate('CustomerDashboard');
     }
   }
 
@@ -136,6 +172,29 @@ const Login = ({ navigation }) => {
       <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
         {/* MODIFIED: No need to pass userRole to Signup from here */}
         <Text style={styles.link}>Don't have an account? Sign Up</Text>
+      </TouchableOpacity>
+      
+      {/* Temporary location test button */}
+      <TouchableOpacity 
+        style={[styles.button, { backgroundColor: '#FF6B6B', marginTop: 20 }]} 
+        onPress={async () => {
+          try {
+            console.log('Testing location service...');
+            const location = await EnhancedLocationService.getCurrentLocation('customer');
+            console.log('Test location result:', location);
+            Alert.alert(
+              'Location Test', 
+              location ? 
+                `Lat: ${location.latitude.toFixed(6)}\nLng: ${location.longitude.toFixed(6)}\nAddress: ${location.address?.formattedAddress || 'No address'}` :
+                'No location data'
+            );
+          } catch (error) {
+            console.error('Location test error:', error);
+            Alert.alert('Error', 'Location test failed: ' + error.message);
+          }
+        }}
+      >
+        <Text style={styles.buttonText}>Test Location</Text>
       </TouchableOpacity>
     </View>
   )
