@@ -33,6 +33,9 @@ const ContractorDashboard = ({ navigation }) => {
   
   // Animation for pulsing location icon
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const ringAnim1 = useRef(new Animated.Value(1)).current;
+  const ringAnim2 = useRef(new Animated.Value(1)).current;
+  const ringAnim3 = useRef(new Animated.Value(1)).current;
 
   // Mock data for available jobs
   const [availableJobs] = useState([
@@ -158,7 +161,7 @@ const ContractorDashboard = ({ navigation }) => {
     };
   }, []);
 
-  // Start pulsing animation for location icon
+  // Start pulsing animation for location icon and rings
   useEffect(() => {
     if (currentLocation) {
       const pulse = Animated.loop(
@@ -175,10 +178,65 @@ const ContractorDashboard = ({ navigation }) => {
           }),
         ])
       );
+
+      const ring1 = Animated.loop(
+        Animated.sequence([
+          Animated.timing(ringAnim1, {
+            toValue: 1.5,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(ringAnim1, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      const ring2 = Animated.loop(
+        Animated.sequence([
+          Animated.timing(ringAnim2, {
+            toValue: 1.3,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(ringAnim2, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      const ring3 = Animated.loop(
+        Animated.sequence([
+          Animated.timing(ringAnim3, {
+            toValue: 1.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(ringAnim3, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
       pulse.start();
-      return () => pulse.stop();
+      ring1.start();
+      ring2.start();
+      ring3.start();
+      
+      return () => {
+        pulse.stop();
+        ring1.stop();
+        ring2.stop();
+        ring3.stop();
+      };
     }
-  }, [currentLocation, pulseAnim]);
+  }, [currentLocation, pulseAnim, ringAnim1, ringAnim2, ringAnim3]);
 
   // Update nearby jobs when location changes
   useEffect(() => {
@@ -474,22 +532,26 @@ const ContractorDashboard = ({ navigation }) => {
                     </View>
                   </View>
                   
-                  <View style={styles.locationDetails}>
-                    <View style={styles.coordinateRow}>
-                      <Text style={styles.coordinateLabel}>Latitude:</Text>
-                      <Text style={styles.coordinateValue}>{currentLocation.latitude.toFixed(6)}°</Text>
-                    </View>
-                    <View style={styles.coordinateRow}>
-                      <Text style={styles.coordinateLabel}>Longitude:</Text>
-                      <Text style={styles.coordinateValue}>{currentLocation.longitude.toFixed(6)}°</Text>
-                    </View>
-                    <View style={styles.coordinateRow}>
-                      <Text style={styles.coordinateLabel}>Accuracy:</Text>
-                      <Text style={styles.coordinateValue}>{currentLocation.accuracy ? `${currentLocation.accuracy.toFixed(0)}m` : 'Unknown'}</Text>
-                    </View>
-                    <View style={styles.coordinateRow}>
-                      <Text style={styles.coordinateLabel}>Last Update:</Text>
-                      <Text style={styles.coordinateValue}>{new Date(currentLocation.timestamp).toLocaleTimeString()}</Text>
+                  {/* Visual Location Display */}
+                  <View style={styles.visualLocationContainer}>
+                    <View style={styles.locationVisualization}>
+                      <View style={styles.gpsIndicator}>
+                        <View style={styles.gpsCenter}>
+                          <Ionicons name="location" size={16} color="#FFFFFF" />
+                        </View>
+                        <Animated.View style={[styles.gpsRing1, { transform: [{ scale: ringAnim1 }] }]} />
+                        <Animated.View style={[styles.gpsRing2, { transform: [{ scale: ringAnim2 }] }]} />
+                        <Animated.View style={[styles.gpsRing3, { transform: [{ scale: ringAnim3 }] }]} />
+                      </View>
+                      <View style={styles.locationInfo}>
+                        <Text style={styles.locationLabel}>Current Position</Text>
+                        <Text style={styles.accuracyText}>
+                          Accuracy: {currentLocation.accuracy ? `${currentLocation.accuracy.toFixed(0)}m` : 'Unknown'}
+                        </Text>
+                        <Text style={styles.updateTime}>
+                          Updated: {new Date(currentLocation.timestamp).toLocaleTimeString()}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -918,6 +980,78 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     flex: 2,
     textAlign: 'right',
+  },
+  visualLocationContainer: {
+    padding: 16,
+    backgroundColor: 'rgba(248, 250, 252, 0.8)',
+  },
+  locationVisualization: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  gpsIndicator: {
+    position: 'relative',
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gpsCenter: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#34A853',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  gpsRing1: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(52, 168, 83, 0.6)',
+    zIndex: 1,
+  },
+  gpsRing2: {
+    position: 'absolute',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 168, 83, 0.4)',
+    zIndex: 2,
+  },
+  gpsRing3: {
+    position: 'absolute',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 168, 83, 0.2)',
+    zIndex: 3,
+  },
+  locationLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  accuracyText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  updateTime: {
+    fontSize: 11,
+    color: '#9CA3AF',
   },
   modalContainer: {
     flex: 1,
