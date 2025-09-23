@@ -20,6 +20,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.quicktrash.app",
+      "config": {
+        "googleMapsApiKey": "AIzaSyBZ1Dsh7_p2AlwvakoKXPUAKwI3QtjulSg"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "QuickTrash needs location access to find nearby pickup services and provide accurate pickup locations.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "QuickTrash needs location access to track contractors and provide real-time pickup updates.",
@@ -47,7 +50,7 @@
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+          "apiKey": "AIzaSyBZ1Dsh7_p2AlwvakoKXPUAKwI3QtjulSg"
         }
       }
     },

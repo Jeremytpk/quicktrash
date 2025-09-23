@@ -49,23 +49,11 @@ class EnhancedLocationService {
         const permissionResult = await Location.requestForegroundPermissionsAsync();
         foregroundStatus = permissionResult.status;
         console.log('Permission result:', foregroundStatus);
-        const permissionResult = await Location.requestForegroundPermissionsAsync();
-        foregroundStatus = permissionResult.status;
       }
       
       if (foregroundStatus !== 'granted') {
         const roleMessages = {
           customer: {
-            title: 'Location Permission Required',
-            message: 'QuickTrash needs location access to show you nearby contractors and provide accurate pickup estimates. Please enable location permissions in your device settings.'
-          },
-          contractor: {
-            title: 'Location Permission Required', 
-            message: 'QuickTrash needs location access to show you nearby jobs and track your location for customers. Please enable location permissions in your device settings.'
-          },
-          driver: {
-            title: 'Location Permission Required',
-            message: 'QuickTrash needs location access to show you nearby jobs and track your location for customers. Please enable location permissions in your device settings.'
             title: isFirstTime ? 'Welcome to QuickTrash!' : 'Location Permission Required',
             message: isFirstTime 
               ? 'Welcome to QuickTrash! To show you nearby contractors and provide accurate pickup estimates, we need access to your location.'
@@ -128,6 +116,7 @@ class EnhancedLocationService {
     }
   }
 
+  // Get current location with address geocoding
   async getCurrentLocation(userRole = 'customer') {
     try {
       console.log('Getting current location...');
@@ -136,21 +125,6 @@ class EnhancedLocationService {
         console.log('No location permission');
         return null;
       }
-
-      // Use the highest accuracy possible for the most precise location
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
-        timeout: 30000,
-        maximumAge: 5000, // Accept location up to 5 seconds old
-      });
-
-      console.log('Location obtained:', location.coords);
-
-  // Get current location with address geocoding
-  async getCurrentLocation(userRole = 'customer') {
-    try {
-      const hasPermission = await this.requestPermissions(null, userRole);
-      if (!hasPermission) return null;
 
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.BestForNavigation,
@@ -178,21 +152,19 @@ class EnhancedLocationService {
       // Notify all listeners
       this.locationCallbacks.forEach(callback => callback(this.currentLocation));
 
+      console.log('Location obtained:', this.currentLocation);
       return this.currentLocation;
     } catch (error) {
       console.error('Error getting current location:', error);
-      Alert.alert('Location Error', 'Unable to get your current location. Please check your GPS settings and ensure location services are enabled.');
       Alert.alert('Location Error', 'Unable to get your current location. Please check your GPS settings.');
       return null;
     }
   }
 
-  async getAddressFromCoordinates(latitude, longitude) {
-    try {
-      console.log('Getting address for coordinates:', latitude, longitude);
   // Get address from coordinates using reverse geocoding
   async getAddressFromCoordinates(latitude, longitude) {
     try {
+      console.log('Getting address for coordinates:', latitude, longitude);
       const addresses = await Location.reverseGeocodeAsync({
         latitude,
         longitude
@@ -209,7 +181,6 @@ class EnhancedLocationService {
           country: address.country || '',
           postalCode: address.postalCode || '',
           formattedAddress: formattedAddress,
-          formattedAddress: this.formatAddress(address),
           coordinates: { latitude, longitude }
         };
       }
@@ -230,14 +201,6 @@ class EnhancedLocationService {
     return parts.join(', ');
   }
 
-  async requestLocationWithAddress(userId, userRole, isFirstTime = false) {
-    try {
-      console.log('Requesting location with address for user:', userId, 'role:', userRole);
-      
-      // Force permission request
-      const hasPermission = await this.requestPermissions(userId, userRole, isFirstTime);
-      if (!hasPermission) {
-        console.log('Permission denied');
   // Request location with user-friendly flow
   async requestLocationWithAddress(userId, userRole, isFirstTime = false) {
     try {
@@ -282,10 +245,6 @@ class EnhancedLocationService {
       }
       
       if (location && location.address) {
-      // Get current location
-      const location = await this.getCurrentLocation(userRole);
-      
-      if (location && location.address) {
         // Mark as requested for this user
         await this.markLocationRequested(userId);
         
@@ -307,11 +266,6 @@ class EnhancedLocationService {
       } else {
         Alert.alert(
           'Location Error',
-          'We couldn\'t get your exact location. Please ensure location services are enabled and try again.',
-          [
-            { text: 'Try Again', onPress: () => this.requestLocationWithAddress(userId, userRole, isFirstTime) },
-            { text: 'Continue Without Location', style: 'cancel' }
-          ]
           'We couldn\'t get your exact location. You can still use the app, but some features may be limited.',
           [{ text: 'Continue' }]
         );
@@ -321,11 +275,6 @@ class EnhancedLocationService {
       console.error('Error requesting location with address:', error);
       Alert.alert(
         'Location Error',
-        'There was an error getting your location. Please check your device settings.',
-        [
-          { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          { text: 'Continue', style: 'cancel' }
-        ]
         'There was an error getting your location. You can still use the app.',
         [{ text: 'Continue' }]
       );
@@ -333,9 +282,6 @@ class EnhancedLocationService {
     }
   }
 
-  addLocationListener(callback) {
-    this.locationCallbacks.push(callback);
-    
   // Add a callback for location updates
   addLocationListener(callback) {
     this.locationCallbacks.push(callback);
@@ -354,8 +300,6 @@ class EnhancedLocationService {
     };
   }
 
-  calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371;
   // Calculate distance between two points (in kilometers)
   calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Radius of the Earth in kilometers
@@ -365,7 +309,6 @@ class EnhancedLocationService {
       Math.sin(dLat/2) * Math.sin(dLat/2) +
       Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const distance = R * c;
     const distance = R * c; // Distance in kilometers
     return distance;
   }
@@ -373,8 +316,138 @@ class EnhancedLocationService {
   deg2rad(deg) {
     return deg * (Math.PI/180);
   }
+
+  // Start watching location changes
+  async startWatchingLocation() {
+    try {
+      if (this.watchId) {
+        await Location.stopLocationUpdatesAsync(this.watchId);
+      }
+
+      this.watchId = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 10000, // Update every 10 seconds
+          distanceInterval: 100, // Update every 100 meters
+        },
+        (location) => {
+          this.currentLocation = {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            accuracy: location.coords.accuracy,
+            timestamp: location.timestamp,
+            isDefault: false,
+            address: this.currentLocation.address // Keep existing address
+          };
+
+          // Notify all listeners
+          this.locationCallbacks.forEach(callback => callback(this.currentLocation));
+        }
+      );
+
+      console.log('Started watching location changes');
+    } catch (error) {
+      console.error('Error starting location watch:', error);
+    }
+  }
+
+  // Stop watching location changes
+  async stopWatchingLocation() {
+    try {
+      if (this.watchId) {
+        await Location.stopLocationUpdatesAsync(this.watchId);
+        this.watchId = null;
+        console.log('Stopped watching location changes');
+      }
+    } catch (error) {
+      console.error('Error stopping location watch:', error);
+    }
+  }
+
+  // Get nearby jobs based on current location
+  async getNearbyJobs(jobs, radiusKm = 25) {
+    if (!this.currentLocation || this.currentLocation.isDefault) {
+      console.log('No current location available for nearby jobs');
+      return [];
+    }
+
+    return jobs.filter(job => {
+      if (!job.coordinates) return false;
+      
+      const distance = this.calculateDistance(
+        this.currentLocation.latitude,
+        this.currentLocation.longitude,
+        job.coordinates.latitude,
+        job.coordinates.longitude
+      );
+
+      return distance <= radiusKm;
+    }).map(job => ({
+      ...job,
+      distance: this.calculateDistance(
+        this.currentLocation.latitude,
+        this.currentLocation.longitude,
+        job.coordinates.latitude,
+        job.coordinates.longitude
+      )
+    }));
+  }
+
+  // Generate route between two points
+  generateRoute(destination) {
+    if (!this.currentLocation || this.currentLocation.isDefault) {
+      return null;
+    }
+
+    return {
+      origin: {
+        latitude: this.currentLocation.latitude,
+        longitude: this.currentLocation.longitude
+      },
+      destination: destination,
+      distance: this.calculateDistance(
+        this.currentLocation.latitude,
+        this.currentLocation.longitude,
+        destination.latitude,
+        destination.longitude
+      )
+    };
+  }
+
+  // Open navigation to destination
+  async openNavigation(destination, label = 'Destination') {
+    try {
+      if (!this.currentLocation || this.currentLocation.isDefault) {
+        Alert.alert('Navigation Error', 'Current location not available for navigation.');
+        return false;
+      }
+
+      const url = Platform.select({
+        ios: `maps://app?daddr=${destination.latitude},${destination.longitude}&dirflg=d`,
+        android: `google.navigation:q=${destination.latitude},${destination.longitude}`
+      });
+
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+        return true;
+      } else {
+        // Fallback to Apple Maps on iOS or Google Maps on Android
+        const fallbackUrl = Platform.select({
+          ios: `http://maps.apple.com/?daddr=${destination.latitude},${destination.longitude}`,
+          android: `https://www.google.com/maps/dir/?api=1&destination=${destination.latitude},${destination.longitude}`
+        });
+        
+        await Linking.openURL(fallbackUrl);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error opening navigation:', error);
+      Alert.alert('Navigation Error', 'Unable to open navigation. Please use your preferred maps app.');
+      return false;
+    }
+  }
 }
 
-export default new EnhancedLocationService();
 // Export singleton instance
 export default new EnhancedLocationService();
