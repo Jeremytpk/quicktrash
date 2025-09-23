@@ -158,7 +158,13 @@ const ContractorDashboard = ({ navigation }) => {
   useEffect(() => {
     initializeLocation();
     return () => {
-      LocationService.stopWatching();
+      // Clean up location services
+      try {
+        LocationService.stopWatching();
+      } catch (error) {
+        console.log('⚠️ Error stopping location watch during cleanup:', error);
+      }
+      
       if (locationPolling) {
         clearInterval(locationPolling);
       }
@@ -253,6 +259,20 @@ const ContractorDashboard = ({ navigation }) => {
     try {
       console.log('🚀 Initializing location services...');
       
+      // Check if location services are enabled first
+      const isLocationEnabled = await LocationService.hasServicesEnabledAsync();
+      if (!isLocationEnabled) {
+        Alert.alert(
+          'Location Services Disabled',
+          'Please enable location services in your device settings to use QuickTrash.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => LocationService.openSettingsAsync() }
+          ]
+        );
+        return;
+      }
+
       // Request permission with more aggressive prompting
       const hasPermission = await LocationService.requestPermission();
       setLocationPermission(hasPermission);
@@ -265,7 +285,7 @@ const ContractorDashboard = ({ navigation }) => {
         if (!location) {
           console.log('🔄 Retrying location request...');
           // Wait a bit and try again
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise(resolve => setTimeout(resolve, 3000));
           location = await LocationService.getCurrentLocation();
         }
         
@@ -282,6 +302,7 @@ const ContractorDashboard = ({ navigation }) => {
               { text: 'Cancel', style: 'cancel' }
             ]
           );
+          return;
         }
 
         // Add location listener for real-time updates
@@ -291,8 +312,12 @@ const ContractorDashboard = ({ navigation }) => {
         });
 
         // Start watching location changes for real-time updates with high frequency
-        await LocationService.startWatching();
-        console.log('👀 Real-time location watching started');
+        const watchStarted = await LocationService.startWatching();
+        if (watchStarted) {
+          console.log('👀 Real-time location watching started');
+        } else {
+          console.log('⚠️ Location watching failed to start');
+        }
         
         // Set up additional location polling for more frequent updates
         const locationPolling = setInterval(async () => {
@@ -305,7 +330,7 @@ const ContractorDashboard = ({ navigation }) => {
           } catch (error) {
             console.log('❌ Location polling error:', error);
           }
-        }, 5000); // Update every 5 seconds
+        }, 10000); // Update every 10 seconds (reduced frequency)
         
         // Store polling interval for cleanup
         setLocationPolling(locationPolling);

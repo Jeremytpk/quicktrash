@@ -27,14 +27,30 @@ class NewLocationService {
       console.log('📱 Permission request result:', status);
       
       if (status !== 'granted') {
-        Alert.alert(
-          'Location Permission Required',
-          'QuickTrash needs location access to show you nearby jobs and provide navigation.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Settings', onPress: () => Location.openSettingsAsync() }
-          ]
-        );
+        // Check if location services are enabled
+        const isLocationEnabled = await Location.hasServicesEnabledAsync();
+        console.log('📍 Location services enabled:', isLocationEnabled);
+        
+        if (!isLocationEnabled) {
+          Alert.alert(
+            'Location Services Disabled',
+            'Please enable location services in your device settings to use QuickTrash.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Location.openSettingsAsync() }
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Location Permission Required',
+            'QuickTrash needs location access to show you nearby jobs and provide navigation. Please grant permission when prompted.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Try Again', onPress: () => this.requestPermission() },
+              { text: 'Settings', onPress: () => Location.openSettingsAsync() }
+            ]
+          );
+        }
         return false;
       }
 
@@ -42,7 +58,14 @@ class NewLocationService {
       return true;
     } catch (error) {
       console.error('❌ Error requesting permission:', error);
-      Alert.alert('Error', 'Failed to request location permission');
+      Alert.alert(
+        'Location Error',
+        'Unable to request location permission. Please check your device settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Settings', onPress: () => Location.openSettingsAsync() }
+        ]
+      );
       return false;
     }
   }
@@ -179,12 +202,15 @@ class NewLocationService {
     try {
       if (this.watchId) {
         console.log('🛑 Stopping location watch');
+        // Use the correct method to stop location updates
         await Location.stopLocationUpdatesAsync(this.watchId);
         this.watchId = null;
         console.log('✅ Location watching stopped');
       }
     } catch (error) {
       console.error('❌ Error stopping location watch:', error);
+      // Force reset the watchId even if stopping fails
+      this.watchId = null;
     }
   }
 
@@ -297,6 +323,25 @@ class NewLocationService {
 
     console.log(`📍 Found ${nearbyJobs.length} nearby jobs`);
     return nearbyJobs;
+  }
+
+  // Check if location services are enabled
+  async hasServicesEnabledAsync() {
+    try {
+      return await Location.hasServicesEnabledAsync();
+    } catch (error) {
+      console.error('❌ Error checking location services:', error);
+      return false;
+    }
+  }
+
+  // Open device settings
+  async openSettingsAsync() {
+    try {
+      await Location.openSettingsAsync();
+    } catch (error) {
+      console.error('❌ Error opening settings:', error);
+    }
   }
 }
 
