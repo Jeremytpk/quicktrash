@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,10 @@ import {
   Modal,
   Alert,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
 import SharedHeader from '../components/SharedHeader';
 import AvailableJobsList from '../components/AvailableJobsList';
 import LocationService from '../services/NewLocationService';
@@ -29,6 +30,9 @@ const ContractorDashboard = ({ navigation }) => {
   const [locationPermission, setLocationPermission] = useState(false);
   const [route, setRoute] = useState(null);
   const [nearbyJobs, setNearbyJobs] = useState([]);
+  
+  // Animation for pulsing location icon
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Mock data for available jobs
   const [availableJobs] = useState([
@@ -153,6 +157,28 @@ const ContractorDashboard = ({ navigation }) => {
       LocationService.stopWatching();
     };
   }, []);
+
+  // Start pulsing animation for location icon
+  useEffect(() => {
+    if (currentLocation) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.3,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    }
+  }, [currentLocation, pulseAnim]);
 
   // Update nearby jobs when location changes
   useEffect(() => {
@@ -375,17 +401,32 @@ const ContractorDashboard = ({ navigation }) => {
                   console.log('🗺️ Map region changed:', region);
                 }}
               >
-                {/* Current location marker */}
+                {/* Current location marker with accuracy circle */}
                 {currentLocation && (
-                  <Marker
-                    coordinate={{
-                      latitude: currentLocation.latitude,
-                      longitude: currentLocation.longitude,
-                    }}
-                    title="Your Location"
-                    description="You are here"
-                    pinColor={MAPS_CONFIG.MARKERS.CONTRACTOR.color}
-                  />
+                  <>
+                    <Marker
+                      coordinate={{
+                        latitude: currentLocation.latitude,
+                        longitude: currentLocation.longitude,
+                      }}
+                      title="Your Location"
+                      description={`Accuracy: ${currentLocation.accuracy ? `${currentLocation.accuracy.toFixed(0)}m` : 'Unknown'}`}
+                      pinColor={MAPS_CONFIG.MARKERS.CONTRACTOR.color}
+                    />
+                    {/* Accuracy circle */}
+                    {currentLocation.accuracy && (
+                      <Circle
+                        center={{
+                          latitude: currentLocation.latitude,
+                          longitude: currentLocation.longitude,
+                        }}
+                        radius={currentLocation.accuracy}
+                        strokeColor="rgba(52, 168, 83, 0.3)"
+                        fillColor="rgba(52, 168, 83, 0.1)"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </>
                 )}
 
                 {/* Available jobs markers */}
@@ -412,14 +453,45 @@ const ContractorDashboard = ({ navigation }) => {
               </MapView>
             )}
             
-            {/* Location Status Overlay */}
+            {/* Real-time Location Display */}
             {locationPermission && currentLocation && (
               <View style={styles.locationStatusOverlay}>
-                <View style={styles.locationStatus}>
-                  <Ionicons name="location" size={16} color="#34A853" />
-                  <Text style={styles.locationStatusText}>
-                    Location: {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
-                  </Text>
+                <View style={styles.realtimeLocationCard}>
+                  <View style={styles.locationHeader}>
+                    <View style={styles.locationIconContainer}>
+                      <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                        <Ionicons name="location" size={20} color="#34A853" />
+                      </Animated.View>
+                      <View style={styles.locationPulse} />
+                    </View>
+                    <View style={styles.locationInfo}>
+                      <Text style={styles.locationTitle}>Live Location</Text>
+                      <Text style={styles.locationSubtitle}>GPS Tracking Active</Text>
+                    </View>
+                    <View style={styles.locationStatusIndicator}>
+                      <View style={styles.statusDot} />
+                      <Text style={styles.statusText}>LIVE</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.locationDetails}>
+                    <View style={styles.coordinateRow}>
+                      <Text style={styles.coordinateLabel}>Latitude:</Text>
+                      <Text style={styles.coordinateValue}>{currentLocation.latitude.toFixed(6)}°</Text>
+                    </View>
+                    <View style={styles.coordinateRow}>
+                      <Text style={styles.coordinateLabel}>Longitude:</Text>
+                      <Text style={styles.coordinateValue}>{currentLocation.longitude.toFixed(6)}°</Text>
+                    </View>
+                    <View style={styles.coordinateRow}>
+                      <Text style={styles.coordinateLabel}>Accuracy:</Text>
+                      <Text style={styles.coordinateValue}>{currentLocation.accuracy ? `${currentLocation.accuracy.toFixed(0)}m` : 'Unknown'}</Text>
+                    </View>
+                    <View style={styles.coordinateRow}>
+                      <Text style={styles.coordinateLabel}>Last Update:</Text>
+                      <Text style={styles.coordinateValue}>{new Date(currentLocation.timestamp).toLocaleTimeString()}</Text>
+                    </View>
+                  </View>
                 </View>
               </View>
             )}
@@ -753,26 +825,99 @@ const styles = StyleSheet.create({
     right: 12,
     zIndex: 1000,
   },
-  locationStatus: {
+  realtimeLocationCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  locationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(240, 253, 244, 0.95)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#D1FAE5',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    padding: 16,
+    backgroundColor: 'rgba(52, 168, 83, 0.05)',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-  locationStatusText: {
-    color: '#34A853',
+  locationIconContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  locationPulse: {
+    position: 'absolute',
+    top: -2,
+    left: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(52, 168, 83, 0.3)',
+    borderWidth: 2,
+    borderColor: '#34A853',
+    opacity: 0.6,
+  },
+  locationInfo: {
+    flex: 1,
+  },
+  locationTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  locationSubtitle: {
     fontSize: 12,
+    color: '#6B7280',
     fontWeight: '500',
-    marginLeft: 6,
+  },
+  locationStatusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#34A853',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    marginRight: 4,
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  locationDetails: {
+    padding: 16,
+  },
+  coordinateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  coordinateLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+    flex: 1,
+  },
+  coordinateValue: {
+    fontSize: 12,
+    color: '#1F2937',
+    fontWeight: '600',
+    fontFamily: 'monospace',
+    flex: 2,
+    textAlign: 'right',
   },
   modalContainer: {
     flex: 1,
