@@ -16,29 +16,50 @@ class EnhancedLocationService {
     this.locationCallbacks = [];
   }
 
+  async isFirstTimeLocationRequest(userId) {
+    try {
+      const hasRequested = await AsyncStorage.getItem(`location_requested_${userId}`);
+      return !hasRequested;
+    } catch (error) {
+      console.error('Error checking first time location request:', error);
+      return true;
+    }
+  }
+
+  async markLocationRequested(userId) {
+    try {
+      await AsyncStorage.setItem(`location_requested_${userId}`, 'true');
+    } catch (error) {
+      console.error('Error marking location requested:', error);
+    }
+  }
+
   async requestPermissions(userId = null, userRole = 'customer', isFirstTime = false) {
     try {
-      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+      // First check current permission status
+      let { status: foregroundStatus } = await Location.getForegroundPermissionsAsync();
+      
+      // If not granted, request permission
+      if (foregroundStatus !== 'granted') {
+        console.log('Requesting location permission...');
+        const permissionResult = await Location.requestForegroundPermissionsAsync();
+        foregroundStatus = permissionResult.status;
+        console.log('Permission result:', foregroundStatus);
+      }
       
       if (foregroundStatus !== 'granted') {
         const roleMessages = {
           customer: {
-            title: isFirstTime ? 'Welcome to QuickTrash!' : 'Location Permission Required',
-            message: isFirstTime 
-              ? 'Welcome to QuickTrash! To show you nearby contractors and provide accurate pickup estimates, we need access to your location.'
-              : 'QuickTrash needs location access to show you nearby contractors and provide accurate pickup estimates. Please enable location permissions in your device settings.'
+            title: 'Location Permission Required',
+            message: 'QuickTrash needs location access to show you nearby contractors and provide accurate pickup estimates. Please enable location permissions in your device settings.'
           },
           contractor: {
-            title: isFirstTime ? 'Welcome to QuickTrash!' : 'Location Permission Required', 
-            message: isFirstTime
-              ? 'Welcome to QuickTrash! To show you nearby jobs and track your location for customers, we need access to your location.'
-              : 'QuickTrash needs location access to show you nearby jobs and track your location for customers. Please enable location permissions in your device settings.'
+            title: 'Location Permission Required', 
+            message: 'QuickTrash needs location access to show you nearby jobs and track your location for customers. Please enable location permissions in your device settings.'
           },
           driver: {
-            title: isFirstTime ? 'Welcome to QuickTrash!' : 'Location Permission Required',
-            message: isFirstTime
-              ? 'Welcome to QuickTrash! To show you nearby jobs and track your location for customers, we need access to your location.'
-              : 'QuickTrash needs location access to show you nearby jobs and track your location for customers. Please enable location permissions in your device settings.'
+            title: 'Location Permission Required',
+            message: 'QuickTrash needs location access to show you nearby jobs and track your location for customers. Please enable location permissions in your device settings.'
           }
         };
 
@@ -50,14 +71,8 @@ class EnhancedLocationService {
           [
             { text: 'Cancel', style: 'cancel' },
             { 
-              text: isFirstTime ? 'Allow Location' : 'Open Settings', 
-              onPress: () => {
-                if (isFirstTime) {
-                  Location.requestForegroundPermissionsAsync();
-                } else {
-                  Linking.openSettings();
-                }
-              }
+              text: 'Open Settings', 
+              onPress: () => Linking.openSettings()
             }
           ]
         );
@@ -65,7 +80,7 @@ class EnhancedLocationService {
       }
 
       if (userId && isFirstTime) {
-        await AsyncStorage.setItem(`location_requested_${userId}`, 'true');
+        await this.markLocationRequested(userId);
       }
 
       if (userRole === 'contractor' || userRole === 'driver') {
@@ -91,13 +106,21 @@ class EnhancedLocationService {
 
   async getCurrentLocation(userRole = 'customer') {
     try {
+      console.log('Getting current location...');
       const hasPermission = await this.requestPermissions(null, userRole);
-      if (!hasPermission) return null;
+      if (!hasPermission) {
+        console.log('No location permission');
+        return null;
+      }
 
+      // Use the highest accuracy possible for the most precise location
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        timeout: 15000,
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeout: 30000,
+        maximumAge: 5000, // Accept location up to 5 seconds old
       });
+
+      console.log('Location obtained:', location.coords);
 
       this.currentLocation = {
         latitude: location.coords.latitude,
@@ -119,13 +142,14 @@ class EnhancedLocationService {
       return this.currentLocation;
     } catch (error) {
       console.error('Error getting current location:', error);
-      Alert.alert('Location Error', 'Unable to get your current location. Please check your GPS settings.');
+      Alert.alert('Location Error', 'Unable to get your current location. Please check your GPS settings and ensure location services are enabled.');
       return null;
     }
   }
 
   async getAddressFromCoordinates(latitude, longitude) {
     try {
+      console.log('Getting address for coordinates:', latitude, longitude);
       const addresses = await Location.reverseGeocodeAsync({
         latitude,
         longitude
@@ -133,13 +157,15 @@ class EnhancedLocationService {
 
       if (addresses && addresses.length > 0) {
         const address = addresses[0];
+        const formattedAddress = this.formatAddress(address);
+        console.log('Address found:', formattedAddress);
         return {
           street: address.street || '',
           city: address.city || '',
           region: address.region || '',
           country: address.country || '',
           postalCode: address.postalCode || '',
-          formattedAddress: this.formatAddress(address),
+          formattedAddress: formattedAddress,
           coordinates: { latitude, longitude }
         };
       }
@@ -161,11 +187,16 @@ class EnhancedLocationService {
 
   async requestLocationWithAddress(userId, userRole, isFirstTime = false) {
     try {
+      console.log('Requesting location with address for user:', userId, 'role:', userRole);
+      
+      // Force permission request
       const hasPermission = await this.requestPermissions(userId, userRole, isFirstTime);
       if (!hasPermission) {
+        console.log('Permission denied');
         return null;
       }
 
+      // Show loading message
       Alert.alert(
         'Getting Your Location',
         'Please wait while we get your current location and address...',
@@ -173,10 +204,31 @@ class EnhancedLocationService {
         { cancelable: false }
       );
 
-      const location = await this.getCurrentLocation(userRole);
+      // Try to get location with multiple attempts for better accuracy
+      let location = null;
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (!location && attempts < maxAttempts) {
+        attempts++;
+        console.log(`Location attempt ${attempts}/${maxAttempts}`);
+        try {
+          location = await this.getCurrentLocation(userRole);
+          if (location && location.address) {
+            console.log('Location obtained successfully');
+            break;
+          }
+        } catch (error) {
+          console.error(`Location attempt ${attempts} failed:`, error);
+          if (attempts < maxAttempts) {
+            // Wait a bit before retrying
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      }
       
       if (location && location.address) {
-        await AsyncStorage.setItem(`location_requested_${userId}`, 'true');
+        await this.markLocationRequested(userId);
         
         Alert.alert(
           'Location Found!',
@@ -195,8 +247,11 @@ class EnhancedLocationService {
       } else {
         Alert.alert(
           'Location Error',
-          'We couldn\'t get your exact location. You can still use the app, but some features may be limited.',
-          [{ text: 'Continue' }]
+          'We couldn\'t get your exact location. Please ensure location services are enabled and try again.',
+          [
+            { text: 'Try Again', onPress: () => this.requestLocationWithAddress(userId, userRole, isFirstTime) },
+            { text: 'Continue Without Location', style: 'cancel' }
+          ]
         );
         return null;
       }
@@ -204,8 +259,11 @@ class EnhancedLocationService {
       console.error('Error requesting location with address:', error);
       Alert.alert(
         'Location Error',
-        'There was an error getting your location. You can still use the app.',
-        [{ text: 'Continue' }]
+        'There was an error getting your location. Please check your device settings.',
+        [
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          { text: 'Continue', style: 'cancel' }
+        ]
       );
       return null;
     }
