@@ -38,6 +38,9 @@ import SafetyToolkit from './screens/SafetyToolkit';
 // Employee screens
 import UserManagement from './screens/UserManagement';
 import SignupDriver from './screens/SignupDriver';
+import JobMonitoring from './screens/JobMonitoring';
+import Analytics from './screens/Analytics';
+
 
 // Create the stack navigator
 const Stack = createNativeStackNavigator();
@@ -191,6 +194,16 @@ function App() {
           <Stack.Screen 
             name="UserManagement" 
             component={UserManagement} 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="JobMonitoring" 
+            component={JobMonitoring} 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="Analytics" 
+            component={Analytics} 
             options={{ headerShown: false }} 
           />
         </Stack.Navigator>
