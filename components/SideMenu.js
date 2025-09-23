@@ -18,6 +18,7 @@ import { useUser } from '../contexts/UserContext';
 import Logo from './Logo';
 import { auth } from '../firebaseConfig';
 import { signOut } from 'firebase/auth';
+import JobMonitoring from '../screens/JobMonitoring';
 
 const { width } = Dimensions.get('window');
 const menuWidth = 320;
@@ -79,11 +80,11 @@ const SideMenu = ({ visible, onClose }) => {
     }
   };
 
-  const handleNavigation = (screenName) => {
+  const handleNavigation = (JobMonitoring) => {
     handleClose(); // Use animated close
     // A slight delay ensures the animation is smooth before navigating
     setTimeout(() => {
-        navigation.navigate(screenName);
+        navigation.navigate(Analytics);
     }, 150);
   };
 
