@@ -300,14 +300,6 @@ const ContractorDashboard = ({ navigation }) => {
           <Text style={styles.sectionTitle}>
             {locationPermission ? 'Available Jobs Near You' : 'Location Required'}
           </Text>
-          {locationPermission && currentLocation && (
-            <View style={styles.locationStatus}>
-              <Ionicons name="location" size={16} color="#34A853" />
-              <Text style={styles.locationStatusText}>
-                Location: {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
-              </Text>
-            </View>
-          )}
           <View style={styles.mapContainer}>
             {!locationPermission ? (
               <View style={styles.locationRequiredView}>
@@ -418,6 +410,18 @@ const ContractorDashboard = ({ navigation }) => {
                   />
                 )}
               </MapView>
+            )}
+            
+            {/* Location Status Overlay */}
+            {locationPermission && currentLocation && (
+              <View style={styles.locationStatusOverlay}>
+                <View style={styles.locationStatus}>
+                  <Ionicons name="location" size={16} color="#34A853" />
+                  <Text style={styles.locationStatusText}>
+                    Location: {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
+                  </Text>
+                </View>
+              </View>
             )}
           </View>
         </View>
@@ -742,16 +746,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
+  locationStatusOverlay: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    zIndex: 1000,
+  },
   locationStatus: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0FDF4',
+    backgroundColor: 'rgba(240, 253, 244, 0.95)',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#D1FAE5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   locationStatusText: {
     color: '#34A853',
