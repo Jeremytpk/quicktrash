@@ -202,10 +202,15 @@ class NewLocationService {
     try {
       if (this.watchId) {
         console.log('🛑 Stopping location watch');
-        // Use the correct method to stop location updates
-        await Location.stopLocationUpdatesAsync(this.watchId);
+        // The watchId is a subscription object returned by watchPositionAsync
+        // We need to call the remove method on the subscription
+        if (this.watchId && typeof this.watchId.remove === 'function') {
+          this.watchId.remove();
+          console.log('✅ Location watching stopped via subscription.remove()');
+        } else {
+          console.log('⚠️ No valid subscription to remove');
+        }
         this.watchId = null;
-        console.log('✅ Location watching stopped');
       }
     } catch (error) {
       console.error('❌ Error stopping location watch:', error);
