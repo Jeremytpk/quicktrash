@@ -17,7 +17,6 @@ import SharedHeader from '../components/SharedHeader';
 import AvailableJobsList from '../components/AvailableJobsList';
 import LocationService from '../services/NewLocationService';
 import MAPS_CONFIG from '../config/mapsConfig';
-import SimpleLocationTest from '../components/SimpleLocationTest';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,7 +29,6 @@ const ContractorDashboard = ({ navigation }) => {
   const [locationPermission, setLocationPermission] = useState(false);
   const [route, setRoute] = useState(null);
   const [nearbyJobs, setNearbyJobs] = useState([]);
-  const [showLocationTest, setShowLocationTest] = useState(false);
 
   // Mock data for available jobs
   const [availableJobs] = useState([
@@ -167,43 +165,67 @@ const ContractorDashboard = ({ navigation }) => {
     try {
       console.log('🚀 Initializing location services...');
       
-      // Request permission
+      // Request permission with more aggressive prompting
       const hasPermission = await LocationService.requestPermission();
       setLocationPermission(hasPermission);
 
       if (hasPermission) {
         console.log('✅ Permission granted, getting location...');
         
-        // Get initial location
-        const location = await LocationService.getCurrentLocation();
+        // Get initial location with retry logic
+        let location = await LocationService.getCurrentLocation();
+        if (!location) {
+          console.log('🔄 Retrying location request...');
+          // Wait a bit and try again
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          location = await LocationService.getCurrentLocation();
+        }
+        
         if (location) {
           console.log('📍 Location obtained:', location);
           setCurrentLocation(location);
+        } else {
+          console.log('❌ Failed to get location after retry');
+          Alert.alert(
+            'Location Error',
+            'Unable to get your current location. Please ensure location services are enabled and try again.',
+            [
+              { text: 'Retry', onPress: initializeLocation },
+              { text: 'Cancel', style: 'cancel' }
+            ]
+          );
         }
 
-        // Add location listener
+        // Add location listener for real-time updates
         LocationService.addListener((location) => {
           console.log('📍 Location update received:', location);
           setCurrentLocation(location);
         });
 
-        // Start watching location changes
+        // Start watching location changes for real-time updates
         await LocationService.startWatching();
         console.log('👀 Location watching started');
       } else {
         console.log('❌ Location permission denied');
         Alert.alert(
-          'Location Required',
-          'You must enable location services to work as a contractor. This allows us to show you nearby jobs and provide navigation.',
+          'Location Access Required',
+          'QuickTrash needs access to your location to show you nearby jobs and provide navigation. This is essential for working as a contractor.',
           [
-            { text: 'Retry', onPress: initializeLocation },
-            { text: 'Cancel', style: 'cancel' }
+            { text: 'Enable Location', onPress: initializeLocation },
+            { text: 'Go to Settings', onPress: () => LocationService.requestPermission() }
           ]
         );
       }
     } catch (error) {
       console.error('❌ Error initializing location:', error);
-      Alert.alert('Location Error', 'Unable to access your location. Please check your device settings.');
+      Alert.alert(
+        'Location Error', 
+        'Unable to access your location. Please check your device settings and ensure location services are enabled.',
+        [
+          { text: 'Retry', onPress: initializeLocation },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
     }
   };
 
@@ -235,28 +257,15 @@ const ContractorDashboard = ({ navigation }) => {
         }
         showBackButton={false}
         rightComponent={
-          <View style={styles.headerRight}>
-            <TouchableOpacity 
-              style={styles.locationTestButton}
-              onPress={() => setShowLocationTest(!showLocationTest)}
-            >
-              <Ionicons name="location" size={20} color="#34A853" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.notificationButton}>
-              <Ionicons name="notifications-outline" size={24} color="#333" />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.badgeText}>2</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.notificationButton}>
+            <Ionicons name="notifications-outline" size={24} color="#333" />
+            <View style={styles.notificationBadge}>
+              <Text style={styles.badgeText}>2</Text>
+            </View>
+          </TouchableOpacity>
         }
       />
 
-      {showLocationTest && (
-        <View style={styles.locationTestContainer}>
-          <SimpleLocationTest onClose={() => setShowLocationTest(false)} />
-        </View>
-      )}
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Today's Stats */}
@@ -291,6 +300,14 @@ const ContractorDashboard = ({ navigation }) => {
           <Text style={styles.sectionTitle}>
             {locationPermission ? 'Available Jobs Near You' : 'Location Required'}
           </Text>
+          {locationPermission && currentLocation && (
+            <View style={styles.locationStatus}>
+              <Ionicons name="location" size={16} color="#34A853" />
+              <Text style={styles.locationStatusText}>
+                Location: {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
+              </Text>
+            </View>
+          )}
           <View style={styles.mapContainer}>
             {!locationPermission ? (
               <View style={styles.locationRequiredView}>
@@ -306,22 +323,65 @@ const ContractorDashboard = ({ navigation }) => {
                   <Ionicons name="location" size={20} color="#FFFFFF" />
                   <Text style={styles.enableLocationText}>Enable Location</Text>
                 </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.refreshLocationButton}
+                  onPress={async () => {
+                    console.log('🔄 Manually refreshing location...');
+                    const location = await LocationService.getCurrentLocation();
+                    if (location) {
+                      setCurrentLocation(location);
+                      console.log('📍 Manual location refresh successful:', location);
+                    }
+                  }}
+                >
+                  <Ionicons name="refresh" size={16} color="#34A853" />
+                  <Text style={styles.refreshLocationText}>Refresh Location</Text>
+                </TouchableOpacity>
               </View>
             ) : (
               <MapView
                 style={styles.map}
                 provider="google"
+                initialRegion={currentLocation ? {
+                  latitude: currentLocation.latitude,
+                  longitude: currentLocation.longitude,
+                  latitudeDelta: 0.005,
+                  longitudeDelta: 0.005,
+                } : MAPS_CONFIG.DEFAULT_REGION}
                 region={currentLocation ? {
                   latitude: currentLocation.latitude,
                   longitude: currentLocation.longitude,
-                  latitudeDelta: 0.0922,
-                  longitudeDelta: 0.0421,
-                } : MAPS_CONFIG.DEFAULT_REGION}
+                  latitudeDelta: 0.005,
+                  longitudeDelta: 0.005,
+                } : undefined}
                 showsUserLocation={true}
                 showsMyLocationButton={true}
                 followsUserLocation={true}
+                showsCompass={true}
+                showsScale={true}
                 customMapStyle={MAPS_CONFIG.MAP_STYLE}
                 mapType="standard"
+                onUserLocationChange={(event) => {
+                  console.log('📍 User location change event:', event.nativeEvent);
+                  if (event.nativeEvent.coordinate) {
+                    const newLocation = {
+                      latitude: event.nativeEvent.coordinate.latitude,
+                      longitude: event.nativeEvent.coordinate.longitude,
+                      accuracy: event.nativeEvent.coordinate.accuracy,
+                      timestamp: Date.now(),
+                      isDefault: false
+                    };
+                    setCurrentLocation(newLocation);
+                    console.log('📍 Real-time location update:', newLocation);
+                    console.log('📍 Map should now center on:', newLocation.latitude, newLocation.longitude);
+                  }
+                }}
+                onMapReady={() => {
+                  console.log('🗺️ Map is ready');
+                }}
+                onRegionChangeComplete={(region) => {
+                  console.log('🗺️ Map region changed:', region);
+                }}
               >
                 {/* Current location marker */}
                 {currentLocation && (
@@ -664,6 +724,41 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  refreshLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#34A853',
+    marginTop: 12,
+  },
+  refreshLocationText: {
+    color: '#34A853',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  locationStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  locationStatusText: {
+    color: '#34A853',
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
   modalContainer: {
     flex: 1,
     backgroundColor: '#F8F9FA',
@@ -771,22 +866,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  locationTestButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F0FDF4',
-  },
-  locationTestContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 1000,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });
 
