@@ -17,10 +17,6 @@ import SharedHeader from '../components/SharedHeader';
 import AvailableJobsList from '../components/AvailableJobsList';
 import LocationService from '../services/LocationService';
 
-// Import Firestore and Auth modules
-import { db, auth } from '../firebaseConfig';
-import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-
 const { width, height } = Dimensions.get('window');
 
 const ContractorDashboard = ({ navigation }) => {
@@ -30,10 +26,33 @@ const ContractorDashboard = ({ navigation }) => {
   const [countdown, setCountdown] = useState(40);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [locationPermission, setLocationPermission] = useState(false);
-  const [nearbyJobs, setNearbyJobs] = useState([]);
   const [route, setRoute] = useState(null);
+  const [nearbyJobs, setNearbyJobs] = useState([]);
 
-  // Mock data for today's stats - this would also be dynamic in a full app
+  // Mock data for available jobs
+  const [availableJobs] = useState([
+    {
+      id: 1,
+      type: 'Household Trash',
+      volume: '3 bags',
+      distance: '1.2 miles',
+      earnings: '$15',
+      address: '123 Oak Street',
+      customerName: 'Sarah J.',
+      coordinates: { latitude: 33.7490, longitude: -84.3880 },
+    },
+    {
+      id: 2,
+      type: 'Bulk Items',
+      volume: 'Old sofa',
+      distance: '2.8 miles',
+      earnings: '$45',
+      address: '456 Pine Avenue',
+      customerName: 'Mike R.',
+      coordinates: { latitude: 33.7590, longitude: -84.3780 },
+    },
+  ]);
+
   const [todayStats] = useState({
     jobsCompleted: 3,
     earnings: '$95',
@@ -55,56 +74,44 @@ const ContractorDashboard = ({ navigation }) => {
     setShowJobModal(true);
     setCountdown(40);
   };
-  
-  // New function to handle marker press on the map
-  const handleJobPress = (job) => {
-      // You can implement an action here, like showing a more detailed view
-      // For now, let's just trigger the job offer modal
-      handleJobOffer(job);
-  };
 
   const handleAcceptJob = async () => {
-    if (!activeJob || !currentLocation) {
-      Alert.alert('Error', 'No active job or location found.');
-      return;
-    }
-
-    try {
-      // 1. Update the job status in Firestore
-      const jobRef = doc(db, 'jobs', activeJob.id);
-      await updateDoc(jobRef, {
-        status: 'in_progress',
-        contractorId: auth.currentUser.uid,
-        acceptedAt: serverTimestamp(),
-      });
-
-      // 2. Generate route to the pickup location
-      const jobRoute = await LocationService.generateRoute({
-        latitude: activeJob.pickupAddress.coordinates.latitude,
-        longitude: activeJob.pickupAddress.coordinates.longitude
+    if (activeJob && currentLocation) {
+      // Generate route to the pickup location
+      const jobRoute = LocationService.generateRoute({
+        latitude: activeJob.coordinates.latitude,
+        longitude: activeJob.coordinates.longitude
       });
       
       if (jobRoute) {
-        setRoute(jobRoute);
+        // Create polyline coordinates for the route
+        const routeCoordinates = [
+          currentLocation,
+          {
+            latitude: activeJob.coordinates.latitude,
+            longitude: activeJob.coordinates.longitude
+          }
+        ];
+        
+        setRoute({
+          ...jobRoute,
+          coordinates: routeCoordinates
+        });
       }
 
-      // 3. Open navigation (This is a mock call for the example)
+      // Open navigation
       await LocationService.openNavigation(
-        activeJob.pickupAddress.coordinates,
-        activeJob.wasteType + ' pickup'
+        {
+          latitude: activeJob.coordinates.latitude,
+          longitude: activeJob.coordinates.longitude
+        },
+        activeJob.type + ' pickup'
       );
-      
-      // 4. Close modal and show success message
-      setShowJobModal(false);
-      Alert.alert('Job Accepted!', `You accepted the ${activeJob?.wasteType} pickup job. Navigation started!`);
-
-      // 5. Navigate to the active jobs screen
-      navigation.navigate('MyJobs', { jobId: activeJob.id });
-
-    } catch (error) {
-      console.error('Error accepting job:', error);
-      Alert.alert('Error', 'Failed to accept job. Please try again.');
     }
+
+    setShowJobModal(false);
+    Alert.alert('Job Accepted!', `You accepted the ${activeJob?.type} pickup job. Navigation started!`);
+    // navigation.navigate('ActiveJob', { job: activeJob });
   };
 
   const handleDeclineJob = () => {
@@ -122,48 +129,21 @@ const ContractorDashboard = ({ navigation }) => {
     }
     return () => clearTimeout(timer);
   }, [showJobModal, countdown]);
-  
-  // The magic happens in this useEffect block
+
+  // Initialize location services
   useEffect(() => {
     initializeLocation();
-    
-    // Set up a real-time listener for pending jobs
-    let unsubscribe;
-    if (locationPermission) {
-      const q = query(collection(db, 'jobs'), where('status', '==', 'pending'));
-      
-      unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const jobs = [];
-        querySnapshot.forEach((doc) => {
-          const jobData = doc.data();
-          // Filter jobs based on a reasonable distance from the contractor's location
-          if (currentLocation && jobData.pickupAddress?.coordinates) {
-            const distance = LocationService.getDistance(
-              currentLocation,
-              jobData.pickupAddress.coordinates
-            );
-            // Example: within a 25km radius
-            if (distance <= 25) { 
-              jobs.push({
-                id: doc.id,
-                ...jobData,
-                distance: distance.toFixed(1) // Add calculated distance, formatted
-              });
-            }
-          }
-        });
-        setNearbyJobs(jobs);
-      });
-    }
-
-    // Clean up the location listener and Firestore listener
     return () => {
       LocationService.stopWatchingLocation();
-      if (unsubscribe) {
-        unsubscribe();
-      }
     };
-  }, [currentLocation, locationPermission]); // Dependencies to re-run the effect
+  }, []);
+
+  // Update nearby jobs when location changes
+  useEffect(() => {
+    if (currentLocation) {
+      updateNearbyJobs();
+    }
+  }, [currentLocation, availableJobs]);
 
   const initializeLocation = async () => {
     try {
@@ -171,11 +151,13 @@ const ContractorDashboard = ({ navigation }) => {
       setLocationPermission(hasPermission);
 
       if (hasPermission) {
+        // Get initial location
         const location = await LocationService.getCurrentLocation();
         if (location) {
           setCurrentLocation(location);
         }
 
+        // Start watching location changes
         LocationService.addLocationListener((location) => {
           setCurrentLocation(location);
         });
@@ -194,6 +176,15 @@ const ContractorDashboard = ({ navigation }) => {
     } catch (error) {
       console.error('Error initializing location:', error);
       Alert.alert('Location Error', 'Unable to access your location. Please check your device settings.');
+    }
+  };
+
+  const updateNearbyJobs = async () => {
+    try {
+      const nearby = await LocationService.getNearbyJobs(availableJobs, 25); // 25km radius
+      setNearbyJobs(nearby);
+    } catch (error) {
+      console.error('Error updating nearby jobs:', error);
     }
   };
 
@@ -225,7 +216,7 @@ const ContractorDashboard = ({ navigation }) => {
         }
       />
 
-
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Today's Stats */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Today's Performance</Text>
@@ -309,9 +300,9 @@ const ContractorDashboard = ({ navigation }) => {
                 {nearbyJobs.map((job) => (
                   <Marker
                     key={job.id}
-                    coordinate={job.pickupAddress.coordinates}
-                    title={job.wasteType}
-                    description={`${job.pricing.total} • ${job.distance}km away`}
+                    coordinate={job.coordinates}
+                    title={job.type}
+                    description={`${job.earnings} • ${job.distance?.toFixed(1)}km away`}
                     pinColor="#34A853"
                     onPress={() => handleJobPress(job)}
                   />
@@ -335,7 +326,7 @@ const ContractorDashboard = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Available Jobs Near You</Text>
           {isOnline ? (
-            <AvailableJobsList jobs={nearbyJobs} onJobPress={handleJobOffer} />
+            <AvailableJobsList />
           ) : (
             <View style={styles.offlineState}>
               <Ionicons name="moon-outline" size={48} color="#9CA3AF" />
@@ -344,7 +335,7 @@ const ContractorDashboard = ({ navigation }) => {
             </View>
           )}
         </View>
-
+      </ScrollView>
 
       {/* Job Offer Modal */}
       <Modal
@@ -364,23 +355,22 @@ const ContractorDashboard = ({ navigation }) => {
           {activeJob && (
             <View style={styles.modalContent}>
               <View style={styles.jobOfferCard}>
-                <Text style={styles.jobOfferType}>{activeJob.wasteType}</Text>
+                <Text style={styles.jobOfferType}>{activeJob.type}</Text>
                 <Text style={styles.jobOfferDetails}>{activeJob.volume}</Text>
-                <Text style={styles.jobOfferAddress}>{activeJob.pickupAddress.street}, {activeJob.pickupAddress.city}</Text>
+                <Text style={styles.jobOfferAddress}>{activeJob.address}</Text>
                 
                 <View style={styles.offerStats}>
                   <View style={styles.offerStat}>
                     <Ionicons name="location" size={20} color="#6B7280" />
-                    <Text style={styles.offerStatText}>{activeJob.distance} km</Text>
+                    <Text style={styles.offerStatText}>{activeJob.distance}</Text>
                   </View>
                   <View style={styles.offerStat}>
                     <Ionicons name="cash" size={20} color="#34A853" />
-                    <Text style={styles.offerStatText}>${activeJob.pricing.total}</Text>
+                    <Text style={styles.offerStatText}>{activeJob.earnings}</Text>
                   </View>
-                  {/* Customer name is not available in the job object from CreateOrder, so this will be a placeholder */}
                   <View style={styles.offerStat}>
                     <Ionicons name="person" size={20} color="#6B7280" />
-                    <Text style={styles.offerStatText}>Customer</Text>
+                    <Text style={styles.offerStatText}>{activeJob.customerName}</Text>
                   </View>
                 </View>
               </View>
@@ -407,7 +397,6 @@ const ContractorDashboard = ({ navigation }) => {
   );
 };
 
-// ... (Styles remain the same)
 const styles = StyleSheet.create({
   container: {
     flex: 1,

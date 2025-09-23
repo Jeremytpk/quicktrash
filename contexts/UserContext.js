@@ -17,6 +17,7 @@ export const useUser = () => {
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [userLocation, setUserLocation] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,19 +30,23 @@ export const UserProvider = ({ children }) => {
             const userData = userDoc.data();
             setUser(firebaseUser);
             setUserRole(userData.role);
+            setUserLocation(userData.currentLocation || null);
           } else {
             // User document doesn't exist, might be first login
             setUser(firebaseUser);
             setUserRole(null);
+            setUserLocation(null);
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
           setUser(firebaseUser);
           setUserRole(null);
+          setUserLocation(null);
         }
       } else {
         setUser(null);
         setUserRole(null);
+        setUserLocation(null);
       }
       setLoading(false);
     });
@@ -55,6 +60,8 @@ export const UserProvider = ({ children }) => {
         return 'CustomerDashboard';
       case 'contractor':
         return 'ContractorDashboard';
+      case 'driver':
+        return 'DashboardDriver';
       case 'employee':
         return 'EmployeeDashboard';
       default:
@@ -65,9 +72,11 @@ export const UserProvider = ({ children }) => {
   const value = {
     user,
     userRole,
+    userLocation,
     loading,
     getHomeDashboard,
     setUserRole,
+    setUserLocation,
   };
 
   return (

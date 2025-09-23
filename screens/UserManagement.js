@@ -14,10 +14,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
 
-// 1. Import necessary Firebase functions
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebaseConfig'; 
-
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -26,44 +22,92 @@ const UserManagement = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [showRoleSwitchModal, setShowRoleSwitchModal] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  // 2. Fetch users from Firebase Firestore
+  // Mock users data
   useEffect(() => {
-    setLoading(true);
-    const usersCollectionRef = collection(db, 'users');
+    const mockUsers = [
+      {
+        id: '1',
+        displayName: 'Sarah Martinez',
+        email: 'customer.sarah.restaurant@quicktrash.com',
+        role: 'customer',
+        status: 'active',
+        joinDate: '2025-01-10',
+        lastLogin: '2025-01-15',
+        totalOrders: 12,
+        totalSpent: 340.50,
+        rating: 4.8,
+        verificationStatus: 'verified',
+        phone: '+1 (555) 123-4567',
+      },
+      {
+        id: '2',
+        displayName: 'Greg Wilson',
+        email: 'picker.greg.student@quicktrash.com',
+        role: 'contractor',
+        status: 'active',
+        joinDate: '2024-12-15',
+        lastLogin: '2025-01-15',
+        totalJobs: 45,
+        totalEarnings: 1850.75,
+        rating: 4.9,
+        verificationStatus: 'verified',
+        phone: '+1 (555) 987-6543',
+        vehicleInfo: {
+          make: 'Ford',
+          model: 'F-150',
+          year: '2019',
+          licensePlate: 'ABC1234'
+        }
+      },
+      {
+        id: '3',
+        displayName: 'Alex Kumar',
+        email: 'support.alex.tech@quicktrash.com',
+        role: 'employee',
+        status: 'active',
+        joinDate: '2024-11-01',
+        lastLogin: '2025-01-15',
+        department: 'Technical Support',
+        permissions: ['user_management', 'dispute_resolution'],
+        verificationStatus: 'verified',
+        phone: '+1 (555) 456-7890',
+      },
+      {
+        id: '4',
+        displayName: 'Mike Johnson',
+        email: 'customer.mike.homeowner@quicktrash.com',
+        role: 'customer',
+        status: 'suspended',
+        joinDate: '2024-12-20',
+        lastLogin: '2025-01-10',
+        totalOrders: 3,
+        totalSpent: 85.00,
+        rating: 3.2,
+        verificationStatus: 'pending',
+        phone: '+1 (555) 234-5678',
+        suspensionReason: 'Multiple complaints from contractors'
+      },
+    ];
 
-    // onSnapshot listens for real-time changes
-    const unsubscribe = onSnapshot(usersCollectionRef, (querySnapshot) => {
-      const usersData = querySnapshot.docs.map(doc => {
-        // Firebase automatically provides the document ID, which we'll use as the user ID
-        return { id: doc.id, ...doc.data() };
-      });
-      setUsers(usersData);
-      setFilteredUsers(usersData);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching users: ", error);
-      Alert.alert("Error", "Failed to fetch users. Please try again later.");
-      setLoading(false);
-    });
-
-    // Clean up the listener on component unmount
-    return () => unsubscribe();
-  }, []); // Empty dependency array ensures this runs once on mount
+    setUsers(mockUsers);
+    setFilteredUsers(mockUsers);
+    setRefreshing(false);
+  }, []);
 
   useEffect(() => {
     let filtered = users;
 
+    // Filter by role
     if (selectedRole !== 'all') {
       filtered = filtered.filter(user => user.role === selectedRole);
     }
 
+    // Filter by search query
     if (searchQuery) {
       filtered = filtered.filter(user =>
-        user.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchQuery.toLowerCase())
+        user.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -98,21 +142,73 @@ const UserManagement = () => {
   };
 
   const handleUserAction = (action, user) => {
-    // Note: To make this fully functional, you would need to update the user data
-    // in Firebase using functions like `updateDoc` or `deleteDoc`.
-    Alert.alert("Action not implemented", "This action would modify the user in Firebase.");
-  };
-
-  const handleSwitchRole = (newRole) => {
-    // Note: To make this fully functional, you would need to update the user's role
-    // in Firebase, perhaps using a Cloud Function.
-    Alert.alert("Action not implemented", "This action would switch the user's role in Firebase.");
+    switch (action) {
+      case 'suspend':
+        Alert.alert(
+          'Suspend User',
+          `Are you sure you want to suspend ${user.displayName}?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Suspend', 
+              style: 'destructive',
+              onPress: () => {
+                setUsers(prev => 
+                  prev.map(u => 
+                    u.id === user.id 
+                      ? { ...u, status: 'suspended', suspensionReason: 'Admin action' }
+                      : u
+                  )
+                );
+                Alert.alert('Success', 'User has been suspended');
+              }
+            }
+          ]
+        );
+        break;
+      case 'activate':
+        setUsers(prev => 
+          prev.map(u => 
+            u.id === user.id 
+              ? { ...u, status: 'active', suspensionReason: undefined }
+              : u
+          )
+        );
+        Alert.alert('Success', 'User has been activated');
+        break;
+      case 'verify':
+        setUsers(prev => 
+          prev.map(u => 
+            u.id === user.id 
+              ? { ...u, verificationStatus: 'verified' }
+              : u
+          )
+        );
+        Alert.alert('Success', 'User has been verified');
+        break;
+      case 'delete':
+        Alert.alert(
+          'Delete User',
+          `Are you sure you want to permanently delete ${user.displayName}?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Delete', 
+              style: 'destructive',
+              onPress: () => {
+                setUsers(prev => prev.filter(u => u.id !== user.id));
+                Alert.alert('Success', 'User has been deleted');
+              }
+            }
+          ]
+        );
+        break;
+    }
   };
 
   const onRefresh = () => {
-    // onSnapshot listener handles real-time updates, so a manual refresh isn't needed
-    // for data. However, we can use it to show a refresh animation.
     setRefreshing(true);
+    // Simulate refresh
     setTimeout(() => setRefreshing(false), 1000);
   };
 
@@ -120,55 +216,52 @@ const UserManagement = () => {
     const verificationIcon = getVerificationIcon(item.verificationStatus);
     
     return (
-      <View style={styles.userCard}>
-        {/* Main Info */}
-        <TouchableOpacity
-          style={styles.cardInfoTouchable}
-          onPress={() => {
-            setSelectedUser(item);
-            setShowUserModal(true);
-          }}
-        >
-          <View style={styles.userHeader}>
-            <View style={styles.userInfo}>
-              <View style={styles.userNameRow}>
-                <Text style={styles.userName}>{item.displayName}</Text>
-                <Ionicons 
-                  name={verificationIcon.name} 
-                  size={16} 
-                  color={verificationIcon.color} 
-                />
+      <TouchableOpacity
+        style={styles.userCard}
+        onPress={() => {
+          setSelectedUser(item);
+          setShowUserModal(true);
+        }}
+      >
+        <View style={styles.userHeader}>
+          <View style={styles.userInfo}>
+            <View style={styles.userNameRow}>
+              <Text style={styles.userName}>{item.displayName}</Text>
+              <Ionicons 
+                name={verificationIcon.name} 
+                size={16} 
+                color={verificationIcon.color} 
+              />
+            </View>
+            <Text style={styles.userEmail}>{item.email}</Text>
+            <View style={styles.userMeta}>
+              <View style={[styles.roleBadge, { backgroundColor: getRoleColor(item.role) + '20' }]}>
+                <Text style={[styles.roleText, { color: getRoleColor(item.role) }]}>
+                  {item.role.charAt(0).toUpperCase() + item.role.slice(1)}
+                </Text>
               </View>
-              <Text style={styles.userEmail}>{item.email}</Text>
-              <View style={styles.userMeta}>
-                <View style={[styles.roleBadge, { backgroundColor: getRoleColor(item.role) + '20' }]}>
-                  <Text style={[styles.roleText, { color: getRoleColor(item.role) }]}>
-                    {item.role ? item.role.charAt(0).toUpperCase() + item.role.slice(1) : 'N/A'}
-                  </Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
-                  <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                    {item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'N/A'}
-                  </Text>
-                </View>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+                <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+                  {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                </Text>
               </View>
             </View>
           </View>
-        </TouchableOpacity>
+        </View>
 
         <View style={styles.userStats}>
           {item.role === 'customer' && (
             <>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{item.totalOrders || 0}</Text>
+                <Text style={styles.statValue}>{item.totalOrders}</Text>
                 <Text style={styles.statLabel}>Orders</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>${(item.totalSpent || 0).toFixed(2)}</Text>
+                <Text style={styles.statValue}>${item.totalSpent?.toFixed(2)}</Text>
                 <Text style={styles.statLabel}>Spent</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{item.rating || 0}</Text>
+                <Text style={styles.statValue}>{item.rating}</Text>
                 <Text style={styles.statLabel}>Rating</Text>
               </View>
             </>
@@ -177,15 +270,15 @@ const UserManagement = () => {
           {item.role === 'contractor' && (
             <>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{item.totalJobs || 0}</Text>
+                <Text style={styles.statValue}>{item.totalJobs}</Text>
                 <Text style={styles.statLabel}>Jobs</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>${(item.totalEarnings || 0).toFixed(2)}</Text>
+                <Text style={styles.statValue}>${item.totalEarnings?.toFixed(2)}</Text>
                 <Text style={styles.statLabel}>Earned</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{item.rating || 0}</Text>
+                <Text style={styles.statValue}>{item.rating}</Text>
                 <Text style={styles.statLabel}>Rating</Text>
               </View>
             </>
@@ -193,23 +286,12 @@ const UserManagement = () => {
 
           {item.role === 'employee' && (
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{item.department || 'N/A'}</Text>
+              <Text style={styles.statValue}>{item.department}</Text>
               <Text style={styles.statLabel}>Department</Text>
             </View>
           )}
         </View>
-
-        <TouchableOpacity
-          style={styles.switchRoleButtonCard}
-          onPress={() => {
-            setSelectedUser(item);
-            setShowRoleSwitchModal(true);
-          }}
-        >
-          <Ionicons name="swap-horizontal" size={16} color="#4B5563" />
-          <Text style={styles.switchRoleButtonTextCard}>Switch Role</Text>
-        </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -244,6 +326,7 @@ const UserManagement = () => {
       />
 
       <View style={styles.content}>
+        {/* Search and Filters */}
         <View style={styles.searchSection}>
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={20} color="#6B7280" style={styles.searchIcon} />
@@ -263,40 +346,34 @@ const UserManagement = () => {
           </ScrollView>
         </View>
 
-        {/* Show loading indicator or empty state */}
-        {loading ? (
-            <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading users...</Text>
-            </View>
-        ) : (
-            <FlatList
-            data={filteredUsers}
-            renderItem={renderUserCard}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContainer}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-                <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={['#34A853']}
-                tintColor="#34A853"
-                />
-            }
-            ListEmptyComponent={
-                <View style={styles.emptyState}>
-                <Ionicons name="people-outline" size={64} color="#9CA3AF" />
-                <Text style={styles.emptyStateTitle}>No Users Found</Text>
-                <Text style={styles.emptyStateDescription}>
-                    {searchQuery ? 'No users match your search criteria' : 'No users to display'}
-                </Text>
-                </View>
-            }
+        {/* Users List */}
+        <FlatList
+          data={filteredUsers}
+          renderItem={renderUserCard}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#34A853']}
+              tintColor="#34A853"
             />
-        )}
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={64} color="#9CA3AF" />
+              <Text style={styles.emptyStateTitle}>No Users Found</Text>
+              <Text style={styles.emptyStateDescription}>
+                {searchQuery ? 'No users match your search criteria' : 'No users to display'}
+              </Text>
+            </View>
+          }
+        />
       </View>
-      
-      {/* User Details Modal (no changes) */}
+
+      {/* User Details Modal */}
       <Modal
         visible={showUserModal}
         animationType="slide"
@@ -367,21 +444,6 @@ const UserManagement = () => {
                   </View>
                 </View>
               )}
-               {selectedUser.role === 'employee' && (
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Employee Information</Text>
-                  <View style={styles.infoGrid}>
-                    <View style={styles.infoItem}>
-                      <Text style={styles.infoLabel}>Department</Text>
-                      <Text style={styles.infoValue}>{selectedUser.department}</Text>
-                    </View>
-                    <View style={styles.infoItem}>
-                      <Text style={styles.infoLabel}>Permissions</Text>
-                      <Text style={styles.infoValue}>{selectedUser.permissions.join(', ')}</Text>
-                    </View>
-                  </View>
-                </View>
-              )}
 
               {/* Suspension Info */}
               {selectedUser.status === 'suspended' && selectedUser.suspensionReason && (
@@ -418,6 +480,7 @@ const UserManagement = () => {
                       <Text style={styles.activateButtonText}>Activate User</Text>
                     </TouchableOpacity>
                   )}
+
                   {selectedUser.verificationStatus !== 'verified' && (
                     <TouchableOpacity
                       style={[styles.actionButton, styles.verifyButton]}
@@ -429,11 +492,12 @@ const UserManagement = () => {
                       <Text style={styles.verifyButtonText}>Verify User</Text>
                     </TouchableOpacity>
                   )}
+
                   <TouchableOpacity
                     style={[styles.actionButton, styles.deleteButton]}
                     onPress={() => {
                       setShowUserModal(false);
-                        handleUserAction('delete', selectedUser);
+                      handleUserAction('delete', selectedUser);
                     }}
                   >
                     <Text style={styles.deleteButtonText}>Delete User</Text>
@@ -443,57 +507,6 @@ const UserManagement = () => {
             </ScrollView>
           </View>
         )}
-      </Modal>
-
-      {/* Role Switch Modal (no changes) */}
-      <Modal
-        visible={showRoleSwitchModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowRoleSwitchModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowRoleSwitchModal(false)}>
-              <Ionicons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Switch User Role</Text>
-            <View style={{ width: 24 }} />
-          </View>
-
-          <View style={styles.modalContent}>
-            <Text style={styles.switchRoleText}>Select a new role for {selectedUser?.displayName}:</Text>
-            <View style={styles.switchRoleOptions}>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  { backgroundColor: getRoleColor('customer') + '15' }
-                ]}
-                onPress={() => handleSwitchRole('customer')}
-              >
-                <Text style={[styles.switchRoleButtonText, { color: getRoleColor('customer') }]}>Customer</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  { backgroundColor: getRoleColor('contractor') + '15' }
-                ]}
-                onPress={() => handleSwitchRole('contractor')}
-              >
-                <Text style={[styles.switchRoleButtonText, { color: getRoleColor('contractor') }]}>Contractor</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  { backgroundColor: getRoleColor('employee') + '15' }
-                ]}
-                onPress={() => handleSwitchRole('employee')}
-              >
-                <Text style={[styles.switchRoleButtonText, { color: getRoleColor('employee') }]}>Employee</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
       </Modal>
     </View>
   );
@@ -583,10 +596,6 @@ const styles = StyleSheet.create({
   userHeader: {
     marginBottom: 12,
   },
-  cardInfoTouchable: {
-    // Make the touchable area cover the user info section
-    marginBottom: 12,
-  },
   userInfo: {
     flex: 1,
   },
@@ -634,7 +643,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
     paddingTop: 12,
-    marginBottom: 12,
   },
   statItem: {
     alignItems: 'center',
@@ -666,16 +674,6 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#6B7280',
   },
   modalContainer: {
     flex: 1,
@@ -790,20 +788,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#DC2626',
-  },
-  switchRoleButtonCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-    gap: 8,
-  },
-  switchRoleButtonTextCard: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4B5563',
   },
 });
 

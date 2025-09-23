@@ -13,6 +13,7 @@ import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../firebaseConfig'
 import { useUser } from '../contexts/UserContext'
 import EnhancedLocationService from '../services/EnhancedLocationService'
+import * as Location from 'expo-location'
 
 const Login = ({ navigation }) => {
   const [email, setEmail] = useState('')
@@ -109,6 +110,75 @@ const Login = ({ navigation }) => {
             }
           ]
         );
+        // Directly request location permission
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        console.log('Location permission status:', status);
+        
+        if (status === 'granted') {
+          console.log('Location permission granted, getting current location...');
+          
+          try {
+            const location = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.BestForNavigation,
+              timeout: 30000,
+            });
+            
+            console.log('Location obtained:', location.coords);
+            
+            // Get address from coordinates
+            const addresses = await Location.reverseGeocodeAsync({
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude
+            });
+            
+            if (addresses && addresses.length > 0) {
+              const address = addresses[0];
+              const formattedAddress = `${address.street || ''}, ${address.city || ''}, ${address.region || ''}`.replace(/^,\s*|,\s*$/g, '');
+              
+              console.log('Address found:', formattedAddress);
+              
+              // Update user document with location data
+              await updateDoc(userRef, {
+                currentLocation: {
+                  coordinates: {
+                    lat: location.coords.latitude,
+                    lng: location.coords.longitude
+                  },
+                  address: formattedAddress,
+                  city: address.city,
+                  region: address.region,
+                  postalCode: address.postalCode,
+                  lastUpdated: serverTimestamp()
+                }
+              });
+              
+              console.log('Location data saved to Firestore');
+              
+              Alert.alert(
+                'Location Found!',
+                `We found you at: ${formattedAddress}`,
+                [{ text: 'Continue', onPress: () => navigateToDashboard(verifiedUserRole) }]
+              );
+            } else {
+              console.log('No address found for coordinates');
+              navigateToDashboard(verifiedUserRole);
+            }
+          } catch (locationError) {
+            console.error('Error getting location:', locationError);
+            Alert.alert(
+              'Location Error',
+              'Could not get your current location. You can still use the app.',
+              [{ text: 'Continue', onPress: () => navigateToDashboard(verifiedUserRole) }]
+            );
+          }
+        } else {
+          console.log('Location permission denied');
+          Alert.alert(
+            'Location Permission Required',
+            'QuickTrash needs location access to show you nearby services. You can enable it later in settings.',
+            [{ text: 'Continue', onPress: () => navigateToDashboard(verifiedUserRole) }]
+          );
+        }
       } catch (locationError) {
         console.error('Error requesting location during login:', locationError);
         // Navigate without location if there's an error
@@ -175,6 +245,7 @@ const Login = ({ navigation }) => {
       </TouchableOpacity>
       
       {/* Temporary location test button */}
+      {/* Debug buttons */}
       <TouchableOpacity 
         style={[styles.button, { backgroundColor: '#FF6B6B', marginTop: 20 }]} 
         onPress={async () => {
@@ -195,6 +266,13 @@ const Login = ({ navigation }) => {
         }}
       >
         <Text style={styles.buttonText}>Test Location</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={[styles.button, { backgroundColor: '#9C27B0', marginTop: 10 }]} 
+        onPress={() => navigation.navigate('LocationDebug')}
+      >
+        <Text style={styles.buttonText}>Location Debug Screen</Text>
       </TouchableOpacity>
     </View>
   )
