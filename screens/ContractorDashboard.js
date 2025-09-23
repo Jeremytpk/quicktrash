@@ -15,7 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import SharedHeader from '../components/SharedHeader';
 import AvailableJobsList from '../components/AvailableJobsList';
-import LocationService from '../services/LocationService';
+import LocationService from '../services/NewLocationService';
+import MAPS_CONFIG from '../config/mapsConfig';
+import SimpleLocationTest from '../components/SimpleLocationTest';
 
 const { width, height } = Dimensions.get('window');
 
@@ -28,6 +30,7 @@ const ContractorDashboard = ({ navigation }) => {
   const [locationPermission, setLocationPermission] = useState(false);
   const [route, setRoute] = useState(null);
   const [nearbyJobs, setNearbyJobs] = useState([]);
+  const [showLocationTest, setShowLocationTest] = useState(false);
 
   // Mock data for available jobs
   const [availableJobs] = useState([
@@ -120,6 +123,21 @@ const ContractorDashboard = ({ navigation }) => {
     Alert.alert('Job Declined', 'Looking for more jobs in your area...');
   };
 
+  const handleJobPress = (job) => {
+    // Show job details or handle job selection
+    Alert.alert(
+      'Job Details',
+      `${job.type} - ${job.volume}\n${job.address}\nEarnings: ${job.earnings}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'View Details', onPress: () => {
+          // Navigate to job details or show more info
+          console.log('Viewing job details:', job);
+        }}
+      ]
+    );
+  };
+
   useEffect(() => {
     let timer;
     if (showJobModal && countdown > 0) {
@@ -134,7 +152,7 @@ const ContractorDashboard = ({ navigation }) => {
   useEffect(() => {
     initializeLocation();
     return () => {
-      LocationService.stopWatchingLocation();
+      LocationService.stopWatching();
     };
   }, []);
 
@@ -147,34 +165,44 @@ const ContractorDashboard = ({ navigation }) => {
 
   const initializeLocation = async () => {
     try {
-      const hasPermission = await LocationService.requestPermissions();
+      console.log('🚀 Initializing location services...');
+      
+      // Request permission
+      const hasPermission = await LocationService.requestPermission();
       setLocationPermission(hasPermission);
 
       if (hasPermission) {
+        console.log('✅ Permission granted, getting location...');
+        
         // Get initial location
         const location = await LocationService.getCurrentLocation();
         if (location) {
+          console.log('📍 Location obtained:', location);
           setCurrentLocation(location);
         }
 
-        // Start watching location changes
-        LocationService.addLocationListener((location) => {
+        // Add location listener
+        LocationService.addListener((location) => {
+          console.log('📍 Location update received:', location);
           setCurrentLocation(location);
         });
 
-        await LocationService.startWatchingLocation();
+        // Start watching location changes
+        await LocationService.startWatching();
+        console.log('👀 Location watching started');
       } else {
+        console.log('❌ Location permission denied');
         Alert.alert(
           'Location Required',
           'You must enable location services to work as a contractor. This allows us to show you nearby jobs and provide navigation.',
           [
             { text: 'Retry', onPress: initializeLocation },
-            { text: 'Go to Settings', onPress: () => LocationService.requestPermissions() }
+            { text: 'Cancel', style: 'cancel' }
           ]
         );
       }
     } catch (error) {
-      console.error('Error initializing location:', error);
+      console.error('❌ Error initializing location:', error);
       Alert.alert('Location Error', 'Unable to access your location. Please check your device settings.');
     }
   };
@@ -207,14 +235,28 @@ const ContractorDashboard = ({ navigation }) => {
         }
         showBackButton={false}
         rightComponent={
-          <TouchableOpacity style={styles.notificationButton}>
-            <Ionicons name="notifications-outline" size={24} color="#333" />
-            <View style={styles.notificationBadge}>
-              <Text style={styles.badgeText}>2</Text>
-            </View>
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity 
+              style={styles.locationTestButton}
+              onPress={() => setShowLocationTest(!showLocationTest)}
+            >
+              <Ionicons name="location" size={20} color="#34A853" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.notificationButton}>
+              <Ionicons name="notifications-outline" size={24} color="#333" />
+              <View style={styles.notificationBadge}>
+                <Text style={styles.badgeText}>2</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         }
       />
+
+      {showLocationTest && (
+        <View style={styles.locationTestContainer}>
+          <SimpleLocationTest onClose={() => setShowLocationTest(false)} />
+        </View>
+      )}
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Today's Stats */}
@@ -268,20 +310,18 @@ const ContractorDashboard = ({ navigation }) => {
             ) : (
               <MapView
                 style={styles.map}
+                provider="google"
                 region={currentLocation ? {
                   latitude: currentLocation.latitude,
                   longitude: currentLocation.longitude,
                   latitudeDelta: 0.0922,
                   longitudeDelta: 0.0421,
-                } : {
-                  latitude: 33.7490,
-                  longitude: -84.3880,
-                  latitudeDelta: 0.0922,
-                  longitudeDelta: 0.0421,
-                }}
+                } : MAPS_CONFIG.DEFAULT_REGION}
                 showsUserLocation={true}
                 showsMyLocationButton={true}
                 followsUserLocation={true}
+                customMapStyle={MAPS_CONFIG.MAP_STYLE}
+                mapType="standard"
               >
                 {/* Current location marker */}
                 {currentLocation && (
@@ -292,7 +332,7 @@ const ContractorDashboard = ({ navigation }) => {
                     }}
                     title="Your Location"
                     description="You are here"
-                    pinColor="#3B82F6"
+                    pinColor={MAPS_CONFIG.MARKERS.CONTRACTOR.color}
                   />
                 )}
 
@@ -303,7 +343,7 @@ const ContractorDashboard = ({ navigation }) => {
                     coordinate={job.coordinates}
                     title={job.type}
                     description={`${job.earnings} • ${job.distance?.toFixed(1)}km away`}
-                    pinColor="#34A853"
+                    pinColor={MAPS_CONFIG.MARKERS.JOB.color}
                     onPress={() => handleJobPress(job)}
                   />
                 ))}
@@ -326,7 +366,9 @@ const ContractorDashboard = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Available Jobs Near You</Text>
           {isOnline ? (
-            <AvailableJobsList />
+            <View style={styles.jobsListContainer}>
+              <AvailableJobsList />
+            </View>
           ) : (
             <View style={styles.offlineState}>
               <Ionicons name="moon-outline" size={48} color="#9CA3AF" />
@@ -582,6 +624,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
+  jobsListContainer: {
+    height: 400, // Fixed height to prevent VirtualizedList nesting
+  },
   locationRequiredView: {
     height: 250,
     justifyContent: 'center',
@@ -721,6 +766,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  locationTestButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F0FDF4',
+  },
+  locationTestContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 1000,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
