@@ -1,8 +1,6 @@
 import * as Location from 'expo-location';
 import { Alert, Platform, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// IMPROVEMENT: Import package to decode polylines from Google Directions API
-import polyline from '@mapbox/polyline';
 
 // IMPROVEMENT: Centralized configuration for easy tweaking
 const CONFIG = {
