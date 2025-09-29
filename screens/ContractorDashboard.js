@@ -506,6 +506,14 @@ const ContractorDashboard = ({ navigation }) => {
     try {
       console.log('🚀 Initializing location services...');
       
+      // Show loading message
+      Alert.alert(
+        'Getting Your Location',
+        'Please wait while we get your current location...',
+        [],
+        { cancelable: false }
+      );
+      
       // Check if location services are enabled first
       const isLocationEnabled = await LocationService.hasServicesEnabledAsync();
       if (!isLocationEnabled) {
@@ -527,26 +535,49 @@ const ContractorDashboard = ({ navigation }) => {
       if (hasPermission) {
         console.log('✅ Permission granted, getting location...');
         
-        // Get initial location with retry logic
-        let location = await LocationService.getCurrentLocation();
-        if (!location) {
-          console.log('🔄 Retrying location request...');
-          // Wait a bit and try again
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          location = await LocationService.getCurrentLocation();
+        // Get initial location with multiple retry attempts
+        let location = null;
+        let attempts = 0;
+        const maxAttempts = 3;
+        
+        while (!location && attempts < maxAttempts) {
+          attempts++;
+          console.log(`🔄 Location attempt ${attempts}/${maxAttempts}`);
+          
+          try {
+            location = await LocationService.getCurrentLocation();
+            if (location) {
+              console.log('📍 Location obtained on attempt', attempts, ':', location);
+              break;
+            }
+          } catch (error) {
+            console.error(`❌ Location attempt ${attempts} failed:`, error);
+          }
+          
+          if (!location && attempts < maxAttempts) {
+            console.log('⏳ Waiting before retry...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
         }
         
         if (location) {
-          console.log('📍 Location obtained:', location);
+          console.log('📍 Final location obtained:', location);
           setCurrentLocation(location);
+          
+          // Show success message with coordinates
+          Alert.alert(
+            'Location Found!',
+            `We found you at: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`,
+            [{ text: 'Continue' }]
+          );
         } else {
-          console.log('❌ Failed to get location after retry');
+          console.log('❌ Failed to get location after all attempts');
           Alert.alert(
             'Location Error',
-            'Unable to get your current location. Please ensure location services are enabled and try again.',
+            'Unable to get your current location after multiple attempts. Please ensure location services are enabled and try again.',
             [
               { text: 'Retry', onPress: initializeLocation },
-              { text: 'Cancel', style: 'cancel' }
+              { text: 'Continue Without Location', style: 'cancel' }
             ]
           );
           return;
@@ -556,6 +587,7 @@ const ContractorDashboard = ({ navigation }) => {
         LocationService.addListener((location) => {
           console.log('📍 Location update received:', location);
           setCurrentLocation(location);
+          console.log('📍 Map should now center on:', location.latitude, location.longitude);
         });
 
         // Start watching location changes for real-time updates with high frequency
@@ -813,16 +845,24 @@ const ContractorDashboard = ({ navigation }) => {
                   onPress={async () => {
                     try {
                       console.log('🔄 Manually refreshing location...');
+                      Alert.alert(
+                        'Getting Location',
+                        'Please wait while we get your current location...',
+                        [],
+                        { cancelable: false }
+                      );
+                      
                       const location = await LocationService.getCurrentLocation();
                       if (location) {
                         setCurrentLocation(location);
                         console.log('📍 Manual location refresh successful:', location);
+                        console.log('📍 Map should now center on:', location.latitude, location.longitude);
                         Alert.alert(
-                          'Location Updated',
-                          `New location: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`
+                          'Location Updated!',
+                          `New location: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}\n\nThe map should now show your actual location.`
                         );
                       } else {
-                        Alert.alert('Location Error', 'Could not get current location');
+                        Alert.alert('Location Error', 'Could not get current location. Please check your device settings.');
                       }
                     } catch (error) {
                       console.error('❌ Error refreshing location:', error);
@@ -831,8 +871,20 @@ const ContractorDashboard = ({ navigation }) => {
                   }}
                 >
                   <Ionicons name="refresh" size={16} color="#34A853" />
-                  <Text style={styles.refreshLocationText}>Refresh Location</Text>
+                  <Text style={styles.refreshLocationText}>Get My Location</Text>
                 </TouchableOpacity>
+                
+                {/* Debug location display */}
+                {currentLocation && (
+                  <View style={styles.locationDebugInfo}>
+                    <Text style={styles.locationDebugText}>
+                      Current: {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
+                    </Text>
+                    <Text style={styles.locationDebugText}>
+                      Accuracy: {currentLocation.accuracy}m
+                    </Text>
+                  </View>
+                )}
               </View>
             ) : (
               <MapView
@@ -1377,6 +1429,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 6,
+  },
+  locationDebugInfo: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  locationDebugText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'monospace',
+    marginBottom: 2,
   },
   locationStatusOverlay: {
     position: 'absolute',
