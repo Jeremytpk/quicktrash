@@ -538,7 +538,7 @@ const ContractorDashboard = ({ navigation }) => {
         // Get initial location with multiple retry attempts
         let location = null;
         let attempts = 0;
-        const maxAttempts = 3;
+        const maxAttempts = 5; // Increased attempts
         
         while (!location && attempts < maxAttempts) {
           attempts++;
@@ -548,6 +548,24 @@ const ContractorDashboard = ({ navigation }) => {
             location = await LocationService.getCurrentLocation();
             if (location) {
               console.log('📍 Location obtained on attempt', attempts, ':', location);
+              
+              // Check if this is a default location
+              const isDefaultLocation = (
+                (location.latitude >= 37.7 && location.latitude <= 37.8 && 
+                 location.longitude >= -122.5 && location.longitude <= -122.4) || // San Francisco
+                (location.latitude >= 33.7 && location.latitude <= 33.8 && 
+                 location.longitude >= -84.4 && location.longitude <= -84.3) || // Atlanta
+                (location.latitude >= 34.0 && location.latitude <= 34.1 && 
+                 location.longitude >= -118.3 && location.longitude <= -118.2)    // Los Angeles
+              );
+              
+              if (isDefaultLocation && attempts < maxAttempts) {
+                console.log('⚠️ Default location detected, retrying...');
+                location = null; // Force retry
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                continue;
+              }
+              
               break;
             }
           } catch (error) {
@@ -556,7 +574,7 @@ const ContractorDashboard = ({ navigation }) => {
           
           if (!location && attempts < maxAttempts) {
             console.log('⏳ Waiting before retry...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(resolve => setTimeout(resolve, 3000));
           }
         }
         
