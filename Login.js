@@ -59,57 +59,6 @@ const Login = ({ navigation }) => {
       try {
         console.log('Requesting location for user:', user.uid, 'role:', verifiedUserRole);
         
-        // Show a more prominent location request
-        Alert.alert(
-          'Location Access Required',
-          'QuickTrash needs access to your location to show you nearby services and provide accurate estimates. This will only take a moment.',
-          [
-            {
-              text: 'Allow Location',
-              onPress: async () => {
-                try {
-                  const locationData = await EnhancedLocationService.requestLocationWithAddress(
-                    user.uid, 
-                    verifiedUserRole, 
-                    true // isFirstTime
-                  );
-                  
-                  console.log('Location data received:', locationData);
-                  
-                  // Update user document with location data if available
-                  if (locationData && locationData.address) {
-                    await updateDoc(userRef, {
-                      currentLocation: {
-                        coordinates: {
-                          lat: locationData.latitude,
-                          lng: locationData.longitude
-                        },
-                        address: locationData.address.formattedAddress,
-                        city: locationData.address.city,
-                        region: locationData.address.region,
-                        postalCode: locationData.address.postalCode,
-                        lastUpdated: serverTimestamp()
-                      }
-                    });
-                    console.log('Location data saved to Firestore');
-                  }
-                  
-                  // Navigate after location is handled
-                  navigateToDashboard(verifiedUserRole);
-                } catch (locationError) {
-                  console.error('Error getting location during login:', locationError);
-                  // Still navigate even if location fails
-                  navigateToDashboard(verifiedUserRole);
-                }
-              }
-            },
-            {
-              text: 'Skip for Now',
-              style: 'cancel',
-              onPress: () => navigateToDashboard(verifiedUserRole)
-            }
-          ]
-        );
         // Directly request location permission
         const { status } = await Location.requestForegroundPermissionsAsync();
         console.log('Location permission status:', status);
@@ -120,10 +69,44 @@ const Login = ({ navigation }) => {
           try {
             const location = await Location.getCurrentPositionAsync({
               accuracy: Location.Accuracy.BestForNavigation,
-              timeout: 30000,
+              timeout: 45000,
+              maximumAge: 0, // Force fresh location
             });
             
             console.log('Location obtained:', location.coords);
+            
+            // Check if this is a default location (San Francisco, Atlanta, etc.)
+            const isDefaultLocation = (
+              (location.coords.latitude >= 37.7 && location.coords.latitude <= 37.8 && 
+               location.coords.longitude >= -122.5 && location.coords.longitude <= -122.4) || // San Francisco
+              (location.coords.latitude >= 33.7 && location.coords.latitude <= 33.8 && 
+               location.coords.longitude >= -84.4 && location.coords.longitude <= -84.3) || // Atlanta
+              (location.coords.latitude >= 34.0 && location.coords.latitude <= 34.1 && 
+               location.coords.longitude >= -118.3 && location.coords.longitude <= -118.2)    // Los Angeles
+            );
+            
+            if (isDefaultLocation) {
+              console.log('⚠️ WARNING: Default location detected! This might not be your real location.');
+              Alert.alert(
+                'Location Issue Detected',
+                'The app detected what appears to be a default location instead of your actual location. This might be due to location services being disabled or restricted.',
+                [
+                  { 
+                    text: 'Try Again', 
+                    onPress: () => {
+                      // Retry location request
+                      handleLogin();
+                    }
+                  },
+                  { 
+                    text: 'Continue Anyway', 
+                    style: 'cancel',
+                    onPress: () => navigateToDashboard(verifiedUserRole)
+                  }
+                ]
+              );
+              return;
+            }
             
             // Get address from coordinates
             const addresses = await Location.reverseGeocodeAsync({
@@ -157,7 +140,15 @@ const Login = ({ navigation }) => {
               Alert.alert(
                 'Location Found!',
                 `We found you at: ${formattedAddress}`,
-                [{ text: 'Continue', onPress: () => navigateToDashboard(verifiedUserRole) }]
+                [{ 
+                  text: 'Continue', 
+                  onPress: () => {
+                    // Small delay to ensure dialog closes properly before navigation
+                    setTimeout(() => {
+                      navigateToDashboard(verifiedUserRole);
+                    }, 200);
+                  }
+                }]
               );
             } else {
               console.log('No address found for coordinates');
