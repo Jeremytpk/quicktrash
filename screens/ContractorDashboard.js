@@ -546,7 +546,7 @@ const ContractorDashboard = ({ navigation }) => {
           
           try {
             location = await LocationService.getCurrentLocation();
-            if (location) {
+        if (location) {
               console.log('📍 Location obtained on attempt', attempts, ':', location);
               
               // Check if this is a default location
@@ -559,11 +559,16 @@ const ContractorDashboard = ({ navigation }) => {
                  location.longitude >= -118.3 && location.longitude <= -118.2)    // Los Angeles
               );
               
-              if (isDefaultLocation && attempts < maxAttempts) {
-                console.log('⚠️ Default location detected, retrying...');
-                location = null; // Force retry
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                continue;
+              if (isDefaultLocation) {
+                console.log('⚠️ Default location detected! Stopping location watching to prevent infinite loop.');
+                // Stop location watching immediately to prevent infinite loop
+                if (locationPolling) {
+                  locationPolling.remove();
+                  setLocationPolling(null);
+                }
+                LocationService.stopWatching();
+                console.log('🛑 Location watching stopped due to default location');
+                break; // Exit the retry loop
               }
               
               break;
@@ -588,25 +593,50 @@ const ContractorDashboard = ({ navigation }) => {
             `We found you at: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`,
             [{ text: 'Continue' }]
           );
-        } else {
+      } else {
           console.log('❌ Failed to get location after all attempts');
-          Alert.alert(
+        Alert.alert(
             'Location Error',
             'Unable to get your current location after multiple attempts. Please ensure location services are enabled and try again.',
-            [
-              { text: 'Retry', onPress: initializeLocation },
+          [
+            { text: 'Retry', onPress: initializeLocation },
               { text: 'Continue Without Location', style: 'cancel' }
             ]
           );
           return;
         }
 
-        // Add location listener for real-time updates
-        LocationService.addListener((location) => {
-          console.log('📍 Location update received:', location);
-          setCurrentLocation(location);
-          console.log('📍 Map should now center on:', location.latitude, location.longitude);
-        });
+        // Add location listener for real-time updates (only if not already listening)
+        if (!locationPolling) {
+          const locationListener = LocationService.addListener((newLocation) => {
+            console.log('📍 Location update received:', newLocation);
+            
+            // Check if this is a default location and stop if so
+            const isDefaultLocation = (
+              (newLocation.latitude >= 37.7 && newLocation.latitude <= 37.8 && 
+               newLocation.longitude >= -122.5 && newLocation.longitude <= -122.4) || // San Francisco
+              (newLocation.latitude >= 33.7 && newLocation.latitude <= 33.8 && 
+               newLocation.longitude >= -84.4 && newLocation.longitude <= -84.3) || // Atlanta
+              (newLocation.latitude >= 34.0 && newLocation.latitude <= 34.1 && 
+               newLocation.longitude >= -118.3 && newLocation.longitude <= -118.2)    // Los Angeles
+            );
+            
+            if (isDefaultLocation) {
+              console.log('⚠️ Default location detected in listener! Stopping location watching.');
+              LocationService.stopWatching();
+              if (locationPolling) {
+                locationPolling.remove();
+                setLocationPolling(null);
+              }
+              return; // Don't update location with default coordinates
+            }
+            
+            setCurrentLocation(newLocation);
+            console.log('📍 Map should now center on:', newLocation.latitude, newLocation.longitude);
+          });
+          
+          setLocationPolling(locationListener);
+        }
 
         // Start watching location changes for real-time updates with high frequency
         const watchStarted = await LocationService.startWatching();
@@ -623,8 +653,8 @@ const ContractorDashboard = ({ navigation }) => {
             if (freshLocation) {
               console.log('📍 Polling location update:', freshLocation);
               setCurrentLocation(freshLocation);
-            }
-          } catch (error) {
+      }
+    } catch (error) {
             console.log('❌ Location polling error:', error);
           }
         }, 10000); // Update every 10 seconds (reduced frequency)
@@ -892,6 +922,22 @@ const ContractorDashboard = ({ navigation }) => {
                   <Text style={styles.refreshLocationText}>Get My Location</Text>
                 </TouchableOpacity>
                 
+                <TouchableOpacity
+                  style={[styles.refreshLocationButton, { backgroundColor: '#EF4444', marginTop: 8 }]}
+                  onPress={() => {
+                    console.log('🛑 Manual stop location watching');
+                    if (locationPolling) {
+                      locationPolling.remove();
+                      setLocationPolling(null);
+                    }
+                    LocationService.stopWatching();
+                    Alert.alert('Location Stopped', 'Location watching has been stopped manually.');
+                  }}
+                >
+                  <Ionicons name="stop" size={16} color="#FFFFFF" />
+                  <Text style={styles.refreshLocationText}>Stop Location</Text>
+                </TouchableOpacity>
+                
                 {/* Debug location display */}
                 {currentLocation && (
                   <View style={styles.locationDebugInfo}>
@@ -957,11 +1003,11 @@ const ContractorDashboard = ({ navigation }) => {
                 {currentLocation && (
                   <>
                     {/* Main location marker */}
-                    <Marker
-                      coordinate={{
-                        latitude: currentLocation.latitude,
-                        longitude: currentLocation.longitude,
-                      }}
+                  <Marker
+                    coordinate={{
+                      latitude: currentLocation.latitude,
+                      longitude: currentLocation.longitude,
+                    }}
                       title="Your Live Location"
                       description={`GPS Active • Accuracy: ${currentLocation.accuracy ? `${currentLocation.accuracy.toFixed(0)}m` : 'Unknown'} • Updated: ${new Date(currentLocation.timestamp).toLocaleTimeString()}`}
                       pinColor="#34A853"
@@ -1048,7 +1094,7 @@ const ContractorDashboard = ({ navigation }) => {
           <Text style={styles.sectionTitle}>Available Jobs Near You</Text>
           {isOnline ? (
             <View style={styles.jobsListContainer}>
-              <AvailableJobsList />
+            <AvailableJobsList />
             </View>
           ) : (
             <View style={styles.offlineState}>
@@ -2165,5 +2211,18 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
+
+// Cleanup on unmount
+useEffect(() => {
+  return () => {
+    console.log('🧹 Cleaning up location services...');
+    if (locationPolling) {
+      locationPolling.remove();
+      setLocationPolling(null);
+    }
+    LocationService.stopWatching();
+    console.log('✅ Location services cleaned up');
+  };
+}, []);
 
 export default ContractorDashboard;
