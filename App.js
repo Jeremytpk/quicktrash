@@ -25,6 +25,7 @@ import HelpFAQ from './screens/HelpFAQ';
 import ContactSupport from './screens/ContactSupport';
 import ErrorScreen from './screens/ErrorScreen';
 import LocationDebugScreen from './components/LocationDebugScreen';
+import LocationTestSimple from './components/LocationTestSimple';
 
 // Customer screens
 import PaymentMethods from './screens/PaymentMethods';
@@ -57,6 +58,11 @@ function App() {
             name="LocationDebug" 
             component={LocationDebugScreen} 
             options={{ title: 'Location Debug', headerTitleAlign: 'center' }} 
+          />
+          <Stack.Screen 
+            name="LocationTestSimple" 
+            component={LocationTestSimple} 
+            options={{ title: 'Simple Location Test', headerTitleAlign: 'center' }} 
           />
           <Stack.Screen 
             name="RoleSelection" 

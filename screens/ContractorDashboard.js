@@ -447,11 +447,22 @@ const ContractorDashboard = ({ navigation }) => {
                 <TouchableOpacity 
                   style={styles.refreshLocationButton}
                   onPress={async () => {
-                    console.log('🔄 Manually refreshing location...');
-                    const location = await LocationService.getCurrentLocation();
-                    if (location) {
-                      setCurrentLocation(location);
-                      console.log('📍 Manual location refresh successful:', location);
+                    try {
+                      console.log('🔄 Manually refreshing location...');
+                      const location = await LocationService.getCurrentLocation();
+                      if (location) {
+                        setCurrentLocation(location);
+                        console.log('📍 Manual location refresh successful:', location);
+                        Alert.alert(
+                          'Location Updated',
+                          `New location: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`
+                        );
+                      } else {
+                        Alert.alert('Location Error', 'Could not get current location');
+                      }
+                    } catch (error) {
+                      console.error('❌ Error refreshing location:', error);
+                      Alert.alert('Location Error', 'Failed to refresh location: ' + error.message);
                     }
                   }}
                 >
@@ -482,6 +493,7 @@ const ContractorDashboard = ({ navigation }) => {
                 showsScale={true}
                 customMapStyle={MAPS_CONFIG.MAP_STYLE}
                 mapType="standard"
+                key={currentLocation ? `${currentLocation.latitude}-${currentLocation.longitude}` : 'default'}
                 onUserLocationChange={(event) => {
                   console.log('📍 User location change event:', event.nativeEvent);
                   if (event.nativeEvent.coordinate) {
