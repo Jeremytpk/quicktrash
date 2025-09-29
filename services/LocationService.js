@@ -164,8 +164,33 @@ class LocationService {
   }
 
   // (stopWatchingLocation and addLocationListener remain the same)
-  stopWatchingLocation() { /* ... */ }
-  addLocationListener(callback) { /* ... */ }
+  stopWatchingLocation() {
+    if (this.watchId) {
+      this.watchId.remove();
+      this.watchId = null;
+    }
+    this.locationCallbacks = [];
+    console.log('🛑 Location watching stopped');
+  }
+
+  addLocationListener(callback) {
+    this.locationCallbacks.push(callback);
+    return () => {
+      const index = this.locationCallbacks.indexOf(callback);
+      if (index > -1) {
+        this.locationCallbacks.splice(index, 1);
+      }
+    };
+  }
+
+  // EMERGENCY: Complete stop of all location services
+  emergencyStop() {
+    console.log('🚨 EMERGENCY STOP: Killing all location services');
+    this.stopWatchingLocation();
+    this.currentLocation = null;
+    this.locationCallbacks = [];
+    console.log('✅ All location services stopped');
+  }
 
   // --- Geolocation and Routing Methods ---
 
