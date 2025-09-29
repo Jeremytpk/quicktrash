@@ -281,6 +281,13 @@ const Login = ({ navigation }) => {
       >
         <Text style={styles.buttonText}>Simple Location Test</Text>
       </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={[styles.button, { backgroundColor: '#E91E63', marginTop: 10 }]} 
+        onPress={() => navigation.navigate('LocationVerification')}
+      >
+        <Text style={styles.buttonText}>Verify My Location</Text>
+      </TouchableOpacity>
     </View>
   )
 }
