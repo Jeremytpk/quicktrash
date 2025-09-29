@@ -31,6 +31,11 @@ const ContractorDashboard = ({ navigation }) => {
   const [route, setRoute] = useState(null);
   const [nearbyJobs, setNearbyJobs] = useState([]);
   const [locationPolling, setLocationPolling] = useState(null);
+  const [showJobsContainer, setShowJobsContainer] = useState(true);
+  const [allJobs, setAllJobs] = useState([]);
+  const [newJobNotification, setNewJobNotification] = useState(null);
+  const [notificationCountdown, setNotificationCountdown] = useState(60);
+  const [showNewJobModal, setShowNewJobModal] = useState(false);
   
   // Animation for pulsing location icon
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -38,7 +43,7 @@ const ContractorDashboard = ({ navigation }) => {
   const ringAnim2 = useRef(new Animated.Value(1)).current;
   const ringAnim3 = useRef(new Animated.Value(1)).current;
 
-  // Mock data for available jobs
+  // Mock data for available jobs (expanded dataset)
   const [availableJobs] = useState([
     {
       id: 1,
@@ -49,6 +54,9 @@ const ContractorDashboard = ({ navigation }) => {
       address: '123 Oak Street',
       customerName: 'Sarah J.',
       coordinates: { latitude: 33.7490, longitude: -84.3880 },
+      urgency: 'normal',
+      estimatedTime: '30 min',
+      description: 'Regular household trash pickup',
     },
     {
       id: 2,
@@ -59,6 +67,61 @@ const ContractorDashboard = ({ navigation }) => {
       address: '456 Pine Avenue',
       customerName: 'Mike R.',
       coordinates: { latitude: 33.7590, longitude: -84.3780 },
+      urgency: 'high',
+      estimatedTime: '45 min',
+      description: 'Large furniture removal',
+    },
+    {
+      id: 3,
+      type: 'Yard Waste',
+      volume: '2 bags + branches',
+      distance: '0.8 miles',
+      earnings: '$25',
+      address: '789 Maple Drive',
+      customerName: 'Jennifer L.',
+      coordinates: { latitude: 33.7390, longitude: -84.3980 },
+      urgency: 'normal',
+      estimatedTime: '25 min',
+      description: 'Garden cleanup waste',
+    },
+    {
+      id: 4,
+      type: 'Electronics',
+      volume: 'Old TV + microwave',
+      distance: '3.5 miles',
+      earnings: '$35',
+      address: '321 Cedar Lane',
+      customerName: 'David K.',
+      coordinates: { latitude: 33.7690, longitude: -84.3680 },
+      urgency: 'low',
+      estimatedTime: '40 min',
+      description: 'Electronic waste disposal',
+    },
+    {
+      id: 5,
+      type: 'Construction Debris',
+      volume: '1 ton',
+      distance: '4.2 miles',
+      earnings: '$85',
+      address: '654 Birch Street',
+      customerName: 'Lisa M.',
+      coordinates: { latitude: 33.7290, longitude: -84.4080 },
+      urgency: 'high',
+      estimatedTime: '90 min',
+      description: 'Renovation debris removal',
+    },
+    {
+      id: 6,
+      type: 'Appliances',
+      volume: 'Washing machine',
+      distance: '2.1 miles',
+      earnings: '$40',
+      address: '987 Elm Avenue',
+      customerName: 'Robert T.',
+      coordinates: { latitude: 33.7590, longitude: -84.3580 },
+      urgency: 'normal',
+      estimatedTime: '35 min',
+      description: 'Large appliance pickup',
     },
   ]);
 
@@ -127,6 +190,150 @@ const ContractorDashboard = ({ navigation }) => {
     setShowJobModal(false);
     setActiveJob(null);
     Alert.alert('Job Declined', 'Looking for more jobs in your area...');
+  };
+
+  const handleAcceptJobFromList = async (job) => {
+    Alert.alert(
+      'Accept Job?',
+      `Accept this ${job.type} job for ${job.earnings}?\n\nLocation: ${job.address}\nEstimated time: ${job.estimatedTime}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Accept Job', 
+          onPress: async () => {
+            // Remove job from available jobs
+            const updatedJobs = availableJobs.filter(j => j.id !== job.id);
+            setAllJobs(updatedJobs);
+            
+            // Start navigation if location is available
+            if (currentLocation) {
+              await LocationService.openNavigation(
+                job.coordinates,
+                job.type + ' pickup'
+              );
+            }
+            
+            Alert.alert('Job Accepted!', `You accepted the ${job.type} pickup job. Navigation started!`);
+            // navigation.navigate('ActiveJob', { job });
+          }
+        }
+      ]
+    );
+  };
+
+  const handleRejectJobFromList = (job) => {
+    Alert.alert(
+      'Reject Job?',
+      `Are you sure you want to reject this ${job.type} job?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Reject', 
+          style: 'destructive',
+          onPress: () => {
+            // Remove job from available jobs
+            const updatedJobs = allJobs.filter(j => j.id !== job.id);
+            setAllJobs(updatedJobs);
+            Alert.alert('Job Rejected', 'The job has been removed from your list.');
+          }
+        }
+      ]
+    );
+  };
+
+  const simulateNewJob = () => {
+    // Simulate new job coming in every 30-60 seconds when online
+    if (!isOnline) return;
+    
+    const newJobTemplates = [
+      {
+        type: 'Emergency Cleanup',
+        volume: '5 bags + debris',
+        distance: `${(Math.random() * 3 + 0.5).toFixed(1)} miles`,
+        earnings: `$${Math.floor(Math.random() * 40 + 20)}`,
+        address: '123 Emergency Lane',
+        customerName: 'Emergency Call',
+        coordinates: { 
+          latitude: 33.7490 + (Math.random() - 0.5) * 0.01, 
+          longitude: -84.3880 + (Math.random() - 0.5) * 0.01 
+        },
+        urgency: 'high',
+        estimatedTime: `${Math.floor(Math.random() * 30 + 20)} min`,
+        description: 'Urgent cleanup required',
+      },
+      {
+        type: 'Furniture Removal',
+        volume: 'Dining table set',
+        distance: `${(Math.random() * 2 + 1).toFixed(1)} miles`,
+        earnings: `$${Math.floor(Math.random() * 30 + 30)}`,
+        address: '456 Furniture Street',
+        customerName: 'Moving Customer',
+        coordinates: { 
+          latitude: 33.7490 + (Math.random() - 0.5) * 0.01, 
+          longitude: -84.3880 + (Math.random() - 0.5) * 0.01 
+        },
+        urgency: 'normal',
+        estimatedTime: `${Math.floor(Math.random() * 20 + 30)} min`,
+        description: 'Large furniture pickup',
+      },
+      {
+        type: 'Garden Waste',
+        volume: '3 bags + branches',
+        distance: `${(Math.random() * 1.5 + 0.8).toFixed(1)} miles`,
+        earnings: `$${Math.floor(Math.random() * 20 + 15)}`,
+        address: '789 Garden Avenue',
+        customerName: 'Garden Owner',
+        coordinates: { 
+          latitude: 33.7490 + (Math.random() - 0.5) * 0.01, 
+          longitude: -84.3880 + (Math.random() - 0.5) * 0.01 
+        },
+        urgency: 'low',
+        estimatedTime: `${Math.floor(Math.random() * 15 + 20)} min`,
+        description: 'Garden cleanup and pruning waste',
+      }
+    ];
+
+    const template = newJobTemplates[Math.floor(Math.random() * newJobTemplates.length)];
+    const newJob = {
+      ...template,
+      id: Date.now() + Math.random(), // Unique ID
+    };
+
+    showNewJobNotification(newJob);
+  };
+
+  const showNewJobNotification = (job) => {
+    setNewJobNotification(job);
+    setShowNewJobModal(true);
+    setNotificationCountdown(60);
+  };
+
+  const handleAcceptNewJob = async () => {
+    if (newJobNotification) {
+      // Add to jobs list
+      setAllJobs(prevJobs => [newJobNotification, ...prevJobs]);
+      
+      // Start navigation if location is available
+      if (currentLocation) {
+        await LocationService.openNavigation(
+          newJobNotification.coordinates,
+          newJobNotification.type + ' pickup'
+        );
+      }
+      
+      Alert.alert('Job Accepted!', `You accepted the ${newJobNotification.type} pickup job. Navigation started!`);
+    }
+    
+    setShowNewJobModal(false);
+    setNewJobNotification(null);
+    setNotificationCountdown(60);
+  };
+
+  const handleRejectNewJob = () => {
+    Alert.alert('Job Rejected', 'Looking for more jobs in your area...');
+    setShowNewJobModal(false);
+    setNewJobNotification(null);
+    setNotificationCountdown(60);
   };
 
   const handleJobPress = (job) => {
@@ -254,6 +461,46 @@ const ContractorDashboard = ({ navigation }) => {
       updateNearbyJobs();
     }
   }, [currentLocation, availableJobs]);
+
+  // Initialize all jobs
+  useEffect(() => {
+    setAllJobs(availableJobs);
+  }, [availableJobs]);
+
+  // New job notification countdown
+  useEffect(() => {
+    let timer;
+    if (showNewJobModal && notificationCountdown > 0) {
+      timer = setTimeout(() => setNotificationCountdown(notificationCountdown - 1), 1000);
+    } else if (notificationCountdown === 0 && showNewJobModal) {
+      // Auto-add to jobs list if not responded to
+      if (newJobNotification) {
+        setAllJobs(prevJobs => [newJobNotification, ...prevJobs]);
+        Alert.alert('Job Auto-Added', 'The job was automatically added to your available jobs list.');
+      }
+      setShowNewJobModal(false);
+      setNewJobNotification(null);
+      setNotificationCountdown(60);
+    }
+    return () => clearTimeout(timer);
+  }, [showNewJobModal, notificationCountdown, newJobNotification]);
+
+  // Simulate new jobs coming in
+  useEffect(() => {
+    let jobSimulator;
+    if (isOnline) {
+      // Start simulating new jobs every 45-90 seconds
+      jobSimulator = setInterval(() => {
+        simulateNewJob();
+      }, Math.random() * 45000 + 45000); // 45-90 seconds
+    }
+    
+    return () => {
+      if (jobSimulator) {
+        clearInterval(jobSimulator);
+      }
+    };
+  }, [isOnline]);
 
   const initializeLocation = async () => {
     try {
@@ -395,6 +642,123 @@ const ContractorDashboard = ({ navigation }) => {
         }
       />
 
+      {/* Jobs Container */}
+      {isOnline && (
+        <View style={styles.jobsContainer}>
+          <View style={styles.jobsHeader}>
+            <View style={styles.jobsHeaderLeft}>
+              <Text style={styles.jobsTitle}>Available Jobs</Text>
+              <Text style={styles.jobsCount}>{allJobs.length} jobs available</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.toggleButton}
+              onPress={() => setShowJobsContainer(!showJobsContainer)}
+            >
+              <Ionicons 
+                name={showJobsContainer ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color="#6B7280" 
+              />
+              <Text style={styles.toggleText}>
+                {showJobsContainer ? 'Hide' : 'Show'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {showJobsContainer && (
+            <ScrollView 
+              style={styles.jobsScrollView}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
+            >
+              {allJobs.map((job) => (
+                <View key={job.id} style={styles.jobCardContainer}>
+                  <View style={[
+                    styles.jobCardNew,
+                    job.urgency === 'high' && styles.urgentJob,
+                    job.urgency === 'low' && styles.lowPriorityJob
+                  ]}>
+                    {/* Job Header */}
+                    <View style={styles.jobCardHeader}>
+                      <View style={styles.jobTypeContainer}>
+                        <View style={[
+                          styles.urgencyBadge,
+                          job.urgency === 'high' && styles.urgencyHigh,
+                          job.urgency === 'normal' && styles.urgencyNormal,
+                          job.urgency === 'low' && styles.urgencyLow
+                        ]}>
+                          <Text style={[
+                            styles.urgencyText,
+                            job.urgency === 'high' && styles.urgencyTextHigh,
+                            job.urgency === 'normal' && styles.urgencyTextNormal,
+                            job.urgency === 'low' && styles.urgencyTextLow
+                          ]}>
+                            {job.urgency.toUpperCase()}
+                          </Text>
+                        </View>
+                        <Text style={styles.jobTypeNew}>{job.type}</Text>
+                      </View>
+                      <View style={styles.earningsContainer}>
+                        <Text style={styles.earningsAmountNew}>{job.earnings}</Text>
+                        <Text style={styles.earningsLabelNew}>Estimated</Text>
+                      </View>
+                    </View>
+
+                    {/* Job Details */}
+                    <View style={styles.jobDetailsSection}>
+                      <Text style={styles.jobDescription}>{job.description}</Text>
+                      <Text style={styles.jobVolumeNew}>{job.volume}</Text>
+                      <View style={styles.jobMetrics}>
+                        <View style={styles.metric}>
+                          <Ionicons name="location-outline" size={16} color="#6B7280" />
+                          <Text style={styles.metricText}>{job.distance}</Text>
+                        </View>
+                        <View style={styles.metric}>
+                          <Ionicons name="time-outline" size={16} color="#6B7280" />
+                          <Text style={styles.metricText}>{job.estimatedTime}</Text>
+                        </View>
+                        <View style={styles.metric}>
+                          <Ionicons name="person-outline" size={16} color="#6B7280" />
+                          <Text style={styles.metricText}>{job.customerName}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.jobAddressNew}>{job.address}</Text>
+                    </View>
+
+                    {/* Action Buttons */}
+                    <View style={styles.jobActions}>
+                      <TouchableOpacity
+                        style={styles.rejectJobButton}
+                        onPress={() => handleRejectJobFromList(job)}
+                      >
+                        <Ionicons name="close-outline" size={18} color="#EF4444" />
+                        <Text style={styles.rejectJobText}>Reject</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.acceptJobButton}
+                        onPress={() => handleAcceptJobFromList(job)}
+                      >
+                        <Ionicons name="checkmark-outline" size={18} color="#FFFFFF" />
+                        <Text style={styles.acceptJobText}>Accept Job</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+              
+              {allJobs.length === 0 && (
+                <View style={styles.noJobsContainer}>
+                  <Ionicons name="briefcase-outline" size={48} color="#9CA3AF" />
+                  <Text style={styles.noJobsTitle}>No Jobs Available</Text>
+                  <Text style={styles.noJobsText}>
+                    All jobs have been accepted or completed. New jobs will appear here when available.
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          )}
+        </View>
+      )}
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Today's Stats */}
@@ -669,6 +1033,91 @@ const ContractorDashboard = ({ navigation }) => {
             </View>
           )}
         </SafeAreaView>
+      </Modal>
+
+      {/* New Job Notification Modal */}
+      <Modal
+        visible={showNewJobModal}
+        animationType="slide"
+        presentationStyle="overFullScreen"
+        transparent={true}
+        onRequestClose={() => setShowNewJobModal(false)}
+      >
+        <View style={styles.notificationOverlay}>
+          <View style={styles.notificationContainer}>
+            {/* Notification Header */}
+            <View style={styles.notificationHeader}>
+              <View style={styles.newJobBadge}>
+                <Ionicons name="flash" size={16} color="#FFFFFF" />
+                <Text style={styles.newJobBadgeText}>NEW JOB</Text>
+              </View>
+              <View style={styles.notificationCountdown}>
+                <Ionicons name="timer-outline" size={16} color="#EF4444" />
+                <Text style={styles.countdownTextNew}>{notificationCountdown}s</Text>
+              </View>
+            </View>
+
+            {newJobNotification && (
+              <>
+                {/* Job Information */}
+                <View style={styles.notificationJobInfo}>
+                  <View style={styles.notificationJobHeader}>
+                    <Text style={styles.notificationJobType}>{newJobNotification.type}</Text>
+                    <Text style={styles.notificationJobEarnings}>{newJobNotification.earnings}</Text>
+                  </View>
+                  
+                  <Text style={styles.notificationJobDescription}>
+                    {newJobNotification.description}
+                  </Text>
+                  
+                  <View style={styles.notificationJobDetails}>
+                    <View style={styles.notificationDetailRow}>
+                      <Ionicons name="cube-outline" size={16} color="#6B7280" />
+                      <Text style={styles.notificationDetailText}>{newJobNotification.volume}</Text>
+                    </View>
+                    <View style={styles.notificationDetailRow}>
+                      <Ionicons name="location-outline" size={16} color="#6B7280" />
+                      <Text style={styles.notificationDetailText}>{newJobNotification.distance}</Text>
+                    </View>
+                    <View style={styles.notificationDetailRow}>
+                      <Ionicons name="time-outline" size={16} color="#6B7280" />
+                      <Text style={styles.notificationDetailText}>{newJobNotification.estimatedTime}</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.notificationLocationInfo}>
+                    <Ionicons name="person-outline" size={16} color="#6B7280" />
+                    <Text style={styles.notificationCustomerName}>{newJobNotification.customerName}</Text>
+                  </View>
+                  <Text style={styles.notificationAddress}>{newJobNotification.address}</Text>
+                </View>
+
+                {/* Action Buttons */}
+                <View style={styles.notificationActions}>
+                  <TouchableOpacity
+                    style={styles.notificationRejectButton}
+                    onPress={handleRejectNewJob}
+                  >
+                    <Ionicons name="close-outline" size={20} color="#EF4444" />
+                    <Text style={styles.notificationRejectText}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.notificationAcceptButton}
+                    onPress={handleAcceptNewJob}
+                  >
+                    <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.notificationAcceptText}>Accept Job</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Auto-add notice */}
+                <Text style={styles.autoAddNotice}>
+                  Job will be automatically added to your list if no action is taken
+                </Text>
+              </>
+            )}
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1226,6 +1675,400 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  // Jobs Container Styles
+  jobsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  jobsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  jobsHeaderLeft: {
+    flex: 1,
+  },
+  jobsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  jobsCount: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  toggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  toggleText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  jobsScrollView: {
+    maxHeight: 400,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  jobCardContainer: {
+    marginTop: 16,
+  },
+  jobCardNew: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  urgentJob: {
+    borderColor: '#EF4444',
+    borderWidth: 2,
+  },
+  lowPriorityJob: {
+    borderColor: '#10B981',
+    borderWidth: 1,
+  },
+  jobCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  jobTypeContainer: {
+    flex: 1,
+  },
+  urgencyBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  urgencyHigh: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  urgencyNormal: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  urgencyLow: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  urgencyText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  urgencyTextHigh: {
+    color: '#DC2626',
+  },
+  urgencyTextNormal: {
+    color: '#2563EB',
+  },
+  urgencyTextLow: {
+    color: '#059669',
+  },
+  jobTypeNew: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  earningsContainer: {
+    alignItems: 'flex-end',
+  },
+  earningsAmountNew: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#34A853',
+    marginBottom: 2,
+  },
+  earningsLabelNew: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  jobDetailsSection: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  jobDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  jobVolumeNew: {
+    fontSize: 16,
+    color: '#374151',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  jobMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  metric: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  metricText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  jobAddressNew: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  jobActions: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB',
+  },
+  rejectJobButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRightWidth: 1,
+    borderRightColor: '#F3F4F6',
+  },
+  rejectJobText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EF4444',
+    marginLeft: 6,
+  },
+  acceptJobButton: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    backgroundColor: '#34A853',
+  },
+  acceptJobText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 6,
+  },
+  noJobsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+  },
+  noJobsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noJobsText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  // New Job Notification Styles
+  notificationOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  notificationContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 380,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#F8F9FA',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  newJobBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#34A853',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  newJobBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 4,
+    letterSpacing: 0.5,
+  },
+  notificationCountdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  countdownTextNew: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  notificationJobInfo: {
+    padding: 20,
+  },
+  notificationJobHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  notificationJobType: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    flex: 1,
+  },
+  notificationJobEarnings: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#34A853',
+  },
+  notificationJobDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    fontStyle: 'italic',
+  },
+  notificationJobDetails: {
+    marginBottom: 16,
+  },
+  notificationDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  notificationDetailText: {
+    fontSize: 14,
+    color: '#374151',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  notificationLocationInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  notificationCustomerName: {
+    fontSize: 14,
+    color: '#374151',
+    marginLeft: 8,
+    fontWeight: '600',
+  },
+  notificationAddress: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 24,
+  },
+  notificationActions: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  notificationRejectButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    backgroundColor: '#F9FAFB',
+    borderRightWidth: 1,
+    borderRightColor: '#E5E7EB',
+  },
+  notificationRejectText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EF4444',
+    marginLeft: 6,
+  },
+  notificationAcceptButton: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    backgroundColor: '#34A853',
+  },
+  notificationAcceptText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 6,
+  },
+  autoAddNotice: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    fontStyle: 'italic',
   },
 });
 
