@@ -638,29 +638,31 @@ const ContractorDashboard = ({ navigation }) => {
           setLocationPolling(locationListener);
         }
 
-        // Start watching location changes for real-time updates with high frequency
-        const watchStarted = await LocationService.startWatching();
-        if (watchStarted) {
-          console.log('👀 Real-time location watching started');
-        } else {
-          console.log('⚠️ Location watching failed to start');
+        // EMERGENCY: Disable location watching to prevent infinite loop
+        console.log('🚨 EMERGENCY: Disabling location watching to prevent infinite loop');
+        
+        // Stop any existing location services
+        LocationService.stopWatching();
+        if (locationPolling) {
+          clearInterval(locationPolling);
+          setLocationPolling(null);
         }
         
-        // Set up additional location polling for more frequent updates
-        const locationPolling = setInterval(async () => {
-          try {
-            const freshLocation = await LocationService.getCurrentLocation();
-            if (freshLocation) {
-              console.log('📍 Polling location update:', freshLocation);
-              setCurrentLocation(freshLocation);
-      }
-    } catch (error) {
-            console.log('❌ Location polling error:', error);
-          }
-        }, 10000); // Update every 10 seconds (reduced frequency)
+        // Show alert to user about location issue
+        Alert.alert(
+          'Location Service Disabled',
+          'Location services have been temporarily disabled to prevent app freezing. The app detected an infinite location loop with default coordinates.',
+          [
+            { 
+              text: 'OK', 
+              onPress: () => {
+                console.log('✅ User acknowledged location service disabled');
+              }
+            }
+          ]
+        );
         
-        // Store polling interval for cleanup
-        setLocationPolling(locationPolling);
+        console.log('✅ Location watching disabled to prevent infinite loop');
       } else {
         console.log('❌ Location permission denied');
         Alert.alert(
@@ -925,17 +927,27 @@ const ContractorDashboard = ({ navigation }) => {
                 <TouchableOpacity
                   style={[styles.refreshLocationButton, { backgroundColor: '#EF4444', marginTop: 8 }]}
                   onPress={() => {
-                    console.log('🛑 Manual stop location watching');
+                    console.log('🛑 EMERGENCY STOP: Killing all location services');
+                    
+                    // Emergency stop all location services
+                    LocationService.emergencyStop();
                     if (locationPolling) {
-                      locationPolling.remove();
+                      clearInterval(locationPolling);
                       setLocationPolling(null);
                     }
-                    LocationService.stopWatching();
-                    Alert.alert('Location Stopped', 'Location watching has been stopped manually.');
+                    
+                    // Clear location state
+                    setCurrentLocation(null);
+                    
+                    Alert.alert(
+                      'Emergency Stop', 
+                      'All location services have been stopped. The app should no longer freeze.',
+                      [{ text: 'OK' }]
+                    );
                   }}
                 >
                   <Ionicons name="stop" size={16} color="#FFFFFF" />
-                  <Text style={styles.refreshLocationText}>Stop Location</Text>
+                  <Text style={styles.refreshLocationText}>EMERGENCY STOP</Text>
                 </TouchableOpacity>
                 
                 {/* Debug location display */}
