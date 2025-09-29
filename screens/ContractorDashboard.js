@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,14 @@ import {
   Modal,
   Alert,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polyline, Circle } from 'react-native-maps';
 import SharedHeader from '../components/SharedHeader';
 import AvailableJobsList from '../components/AvailableJobsList';
-import LocationService from '../services/LocationService';
-
-// Import Firestore and Auth modules
-import { db, auth } from '../firebaseConfig';
-import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import LocationService from '../services/NewLocationService';
+import MAPS_CONFIG from '../config/mapsConfig';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,10 +28,40 @@ const ContractorDashboard = ({ navigation }) => {
   const [countdown, setCountdown] = useState(40);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [locationPermission, setLocationPermission] = useState(false);
-  const [nearbyJobs, setNearbyJobs] = useState([]);
   const [route, setRoute] = useState(null);
+  const [nearbyJobs, setNearbyJobs] = useState([]);
+  const [locationPolling, setLocationPolling] = useState(null);
+  
+  // Animation for pulsing location icon
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const ringAnim1 = useRef(new Animated.Value(1)).current;
+  const ringAnim2 = useRef(new Animated.Value(1)).current;
+  const ringAnim3 = useRef(new Animated.Value(1)).current;
 
-  // Mock data for today's stats - this would also be dynamic in a full app
+  // Mock data for available jobs
+  const [availableJobs] = useState([
+    {
+      id: 1,
+      type: 'Household Trash',
+      volume: '3 bags',
+      distance: '1.2 miles',
+      earnings: '$15',
+      address: '123 Oak Street',
+      customerName: 'Sarah J.',
+      coordinates: { latitude: 33.7490, longitude: -84.3880 },
+    },
+    {
+      id: 2,
+      type: 'Bulk Items',
+      volume: 'Old sofa',
+      distance: '2.8 miles',
+      earnings: '$45',
+      address: '456 Pine Avenue',
+      customerName: 'Mike R.',
+      coordinates: { latitude: 33.7590, longitude: -84.3780 },
+    },
+  ]);
+
   const [todayStats] = useState({
     jobsCompleted: 3,
     earnings: '$95',
@@ -55,62 +83,65 @@ const ContractorDashboard = ({ navigation }) => {
     setShowJobModal(true);
     setCountdown(40);
   };
-  
-  // New function to handle marker press on the map
-  const handleJobPress = (job) => {
-      // You can implement an action here, like showing a more detailed view
-      // For now, let's just trigger the job offer modal
-      handleJobOffer(job);
-  };
 
   const handleAcceptJob = async () => {
-    if (!activeJob || !currentLocation) {
-      Alert.alert('Error', 'No active job or location found.');
-      return;
-    }
-
-    try {
-      // 1. Update the job status in Firestore
-      const jobRef = doc(db, 'jobs', activeJob.id);
-      await updateDoc(jobRef, {
-        status: 'in_progress',
-        contractorId: auth.currentUser.uid,
-        acceptedAt: serverTimestamp(),
-      });
-
-      // 2. Generate route to the pickup location
-      const jobRoute = await LocationService.generateRoute({
-        latitude: activeJob.pickupAddress.coordinates.latitude,
-        longitude: activeJob.pickupAddress.coordinates.longitude
+    if (activeJob && currentLocation) {
+      // Generate route to the pickup location
+      const jobRoute = LocationService.generateRoute({
+        latitude: activeJob.coordinates.latitude,
+        longitude: activeJob.coordinates.longitude
       });
       
       if (jobRoute) {
-        setRoute(jobRoute);
+        // Create polyline coordinates for the route
+        const routeCoordinates = [
+          currentLocation,
+          {
+            latitude: activeJob.coordinates.latitude,
+            longitude: activeJob.coordinates.longitude
+          }
+        ];
+        
+        setRoute({
+          ...jobRoute,
+          coordinates: routeCoordinates
+        });
       }
 
-      // 3. Open navigation (This is a mock call for the example)
+      // Open navigation
       await LocationService.openNavigation(
-        activeJob.pickupAddress.coordinates,
-        activeJob.wasteType + ' pickup'
+        {
+          latitude: activeJob.coordinates.latitude,
+          longitude: activeJob.coordinates.longitude
+        },
+        activeJob.type + ' pickup'
       );
-      
-      // 4. Close modal and show success message
-      setShowJobModal(false);
-      Alert.alert('Job Accepted!', `You accepted the ${activeJob?.wasteType} pickup job. Navigation started!`);
-
-      // 5. Navigate to the active jobs screen
-      navigation.navigate('MyJobs', { jobId: activeJob.id });
-
-    } catch (error) {
-      console.error('Error accepting job:', error);
-      Alert.alert('Error', 'Failed to accept job. Please try again.');
     }
+
+    setShowJobModal(false);
+    Alert.alert('Job Accepted!', `You accepted the ${activeJob?.type} pickup job. Navigation started!`);
+    // navigation.navigate('ActiveJob', { job: activeJob });
   };
 
   const handleDeclineJob = () => {
     setShowJobModal(false);
     setActiveJob(null);
     Alert.alert('Job Declined', 'Looking for more jobs in your area...');
+  };
+
+  const handleJobPress = (job) => {
+    // Show job details or handle job selection
+    Alert.alert(
+      'Job Details',
+      `${job.type} - ${job.volume}\n${job.address}\nEarnings: ${job.earnings}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'View Details', onPress: () => {
+          // Navigate to job details or show more info
+          console.log('Viewing job details:', job);
+        }}
+      ]
+    );
   };
 
   useEffect(() => {
@@ -122,78 +153,217 @@ const ContractorDashboard = ({ navigation }) => {
     }
     return () => clearTimeout(timer);
   }, [showJobModal, countdown]);
-  
-  // The magic happens in this useEffect block
+
+  // Initialize location services
   useEffect(() => {
     initializeLocation();
-    
-    // Set up a real-time listener for pending jobs
-    let unsubscribe;
-    if (locationPermission) {
-      const q = query(collection(db, 'jobs'), where('status', '==', 'pending'));
-      
-      unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const jobs = [];
-        querySnapshot.forEach((doc) => {
-          const jobData = doc.data();
-          // Filter jobs based on a reasonable distance from the contractor's location
-          if (currentLocation && jobData.pickupAddress?.coordinates) {
-            const distance = LocationService.getDistance(
-              currentLocation,
-              jobData.pickupAddress.coordinates
-            );
-            // Example: within a 25km radius
-            if (distance <= 25) { 
-              jobs.push({
-                id: doc.id,
-                ...jobData,
-                distance: distance.toFixed(1) // Add calculated distance, formatted
-              });
-            }
-          }
-        });
-        setNearbyJobs(jobs);
-      });
-    }
-
-    // Clean up the location listener and Firestore listener
     return () => {
-      LocationService.stopWatchingLocation();
-      if (unsubscribe) {
-        unsubscribe();
+      // Clean up location services
+      try {
+        LocationService.stopWatching();
+      } catch (error) {
+        console.log('⚠️ Error stopping location watch during cleanup:', error);
+      }
+      
+      if (locationPolling) {
+        clearInterval(locationPolling);
       }
     };
-  }, [currentLocation, locationPermission]); // Dependencies to re-run the effect
+  }, [locationPolling]);
+
+  // Start pulsing animation for location icon and rings
+  useEffect(() => {
+    if (currentLocation) {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.3,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      const ring1 = Animated.loop(
+        Animated.sequence([
+          Animated.timing(ringAnim1, {
+            toValue: 1.5,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(ringAnim1, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      const ring2 = Animated.loop(
+        Animated.sequence([
+          Animated.timing(ringAnim2, {
+            toValue: 1.3,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(ringAnim2, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      const ring3 = Animated.loop(
+        Animated.sequence([
+          Animated.timing(ringAnim3, {
+            toValue: 1.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(ringAnim3, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      pulse.start();
+      ring1.start();
+      ring2.start();
+      ring3.start();
+      
+      return () => {
+        pulse.stop();
+        ring1.stop();
+        ring2.stop();
+        ring3.stop();
+      };
+    }
+  }, [currentLocation, pulseAnim, ringAnim1, ringAnim2, ringAnim3]);
+
+  // Update nearby jobs when location changes
+  useEffect(() => {
+    if (currentLocation) {
+      updateNearbyJobs();
+    }
+  }, [currentLocation, availableJobs]);
 
   const initializeLocation = async () => {
     try {
-      const hasPermission = await LocationService.requestPermissions();
+      console.log('🚀 Initializing location services...');
+      
+      // Check if location services are enabled first
+      const isLocationEnabled = await LocationService.hasServicesEnabledAsync();
+      if (!isLocationEnabled) {
+        Alert.alert(
+          'Location Services Disabled',
+          'Please enable location services in your device settings to use QuickTrash.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => LocationService.openSettingsAsync() }
+          ]
+        );
+        return;
+      }
+
+      // Request permission with more aggressive prompting
+      const hasPermission = await LocationService.requestPermission();
       setLocationPermission(hasPermission);
 
       if (hasPermission) {
-        const location = await LocationService.getCurrentLocation();
+        console.log('✅ Permission granted, getting location...');
+        
+        // Get initial location with retry logic
+        let location = await LocationService.getCurrentLocation();
+        if (!location) {
+          console.log('🔄 Retrying location request...');
+          // Wait a bit and try again
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          location = await LocationService.getCurrentLocation();
+        }
+        
         if (location) {
+          console.log('📍 Location obtained:', location);
           setCurrentLocation(location);
+        } else {
+          console.log('❌ Failed to get location after retry');
+          Alert.alert(
+            'Location Error',
+            'Unable to get your current location. Please ensure location services are enabled and try again.',
+            [
+              { text: 'Retry', onPress: initializeLocation },
+              { text: 'Cancel', style: 'cancel' }
+            ]
+          );
+          return;
         }
 
-        LocationService.addLocationListener((location) => {
+        // Add location listener for real-time updates
+        LocationService.addListener((location) => {
+          console.log('📍 Location update received:', location);
           setCurrentLocation(location);
         });
 
-        await LocationService.startWatchingLocation();
+        // Start watching location changes for real-time updates with high frequency
+        const watchStarted = await LocationService.startWatching();
+        if (watchStarted) {
+          console.log('👀 Real-time location watching started');
+        } else {
+          console.log('⚠️ Location watching failed to start');
+        }
+        
+        // Set up additional location polling for more frequent updates
+        const locationPolling = setInterval(async () => {
+          try {
+            const freshLocation = await LocationService.getCurrentLocation();
+            if (freshLocation) {
+              console.log('📍 Polling location update:', freshLocation);
+              setCurrentLocation(freshLocation);
+            }
+          } catch (error) {
+            console.log('❌ Location polling error:', error);
+          }
+        }, 10000); // Update every 10 seconds (reduced frequency)
+        
+        // Store polling interval for cleanup
+        setLocationPolling(locationPolling);
       } else {
+        console.log('❌ Location permission denied');
         Alert.alert(
-          'Location Required',
-          'You must enable location services to work as a contractor. This allows us to show you nearby jobs and provide navigation.',
+          'Location Access Required',
+          'QuickTrash needs access to your location to show you nearby jobs and provide navigation. This is essential for working as a contractor.',
           [
-            { text: 'Retry', onPress: initializeLocation },
-            { text: 'Go to Settings', onPress: () => LocationService.requestPermissions() }
+            { text: 'Enable Location', onPress: initializeLocation },
+            { text: 'Go to Settings', onPress: () => LocationService.requestPermission() }
           ]
         );
       }
     } catch (error) {
-      console.error('Error initializing location:', error);
-      Alert.alert('Location Error', 'Unable to access your location. Please check your device settings.');
+      console.error('❌ Error initializing location:', error);
+      Alert.alert(
+        'Location Error', 
+        'Unable to access your location. Please check your device settings and ensure location services are enabled.',
+        [
+          { text: 'Retry', onPress: initializeLocation },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    }
+  };
+
+  const updateNearbyJobs = async () => {
+    try {
+      const nearby = await LocationService.getNearbyJobs(availableJobs, 25); // 25km radius
+      setNearbyJobs(nearby);
+    } catch (error) {
+      console.error('Error updating nearby jobs:', error);
     }
   };
 
@@ -226,6 +396,7 @@ const ContractorDashboard = ({ navigation }) => {
       />
 
 
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Today's Stats */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Today's Performance</Text>
@@ -273,46 +444,140 @@ const ContractorDashboard = ({ navigation }) => {
                   <Ionicons name="location" size={20} color="#FFFFFF" />
                   <Text style={styles.enableLocationText}>Enable Location</Text>
                 </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.refreshLocationButton}
+                  onPress={async () => {
+                    console.log('🔄 Manually refreshing location...');
+                    const location = await LocationService.getCurrentLocation();
+                    if (location) {
+                      setCurrentLocation(location);
+                      console.log('📍 Manual location refresh successful:', location);
+                    }
+                  }}
+                >
+                  <Ionicons name="refresh" size={16} color="#34A853" />
+                  <Text style={styles.refreshLocationText}>Refresh Location</Text>
+                </TouchableOpacity>
               </View>
             ) : (
               <MapView
                 style={styles.map}
+                provider="google"
+                initialRegion={currentLocation ? {
+                  latitude: currentLocation.latitude,
+                  longitude: currentLocation.longitude,
+                  latitudeDelta: 0.005,
+                  longitudeDelta: 0.005,
+                } : MAPS_CONFIG.DEFAULT_REGION}
                 region={currentLocation ? {
                   latitude: currentLocation.latitude,
                   longitude: currentLocation.longitude,
-                  latitudeDelta: 0.0922,
-                  longitudeDelta: 0.0421,
-                } : {
-                  latitude: 33.7490,
-                  longitude: -84.3880,
-                  latitudeDelta: 0.0922,
-                  longitudeDelta: 0.0421,
-                }}
+                  latitudeDelta: 0.005,
+                  longitudeDelta: 0.005,
+                } : undefined}
                 showsUserLocation={true}
                 showsMyLocationButton={true}
                 followsUserLocation={true}
+                showsCompass={true}
+                showsScale={true}
+                customMapStyle={MAPS_CONFIG.MAP_STYLE}
+                mapType="standard"
+                onUserLocationChange={(event) => {
+                  console.log('📍 User location change event:', event.nativeEvent);
+                  if (event.nativeEvent.coordinate) {
+                    const newLocation = {
+                      latitude: event.nativeEvent.coordinate.latitude,
+                      longitude: event.nativeEvent.coordinate.longitude,
+                      accuracy: event.nativeEvent.coordinate.accuracy,
+                      timestamp: Date.now(),
+                      isDefault: false
+                    };
+                    setCurrentLocation(newLocation);
+                    console.log('📍 Real-time location update:', newLocation);
+                    console.log('📍 Map should now center on:', newLocation.latitude, newLocation.longitude);
+                    
+                    // Update nearby jobs when location changes
+                    updateNearbyJobs();
+                  }
+                }}
+                onMapReady={() => {
+                  console.log('🗺️ Map is ready');
+                }}
+                onRegionChangeComplete={(region) => {
+                  console.log('🗺️ Map region changed:', region);
+                }}
               >
-                {/* Current location marker */}
+                {/* Real-time location tracking */}
                 {currentLocation && (
-                  <Marker
-                    coordinate={{
-                      latitude: currentLocation.latitude,
-                      longitude: currentLocation.longitude,
-                    }}
-                    title="Your Location"
-                    description="You are here"
-                    pinColor="#3B82F6"
-                  />
+                  <>
+                    {/* Main location marker */}
+                    <Marker
+                      coordinate={{
+                        latitude: currentLocation.latitude,
+                        longitude: currentLocation.longitude,
+                      }}
+                      title="Your Live Location"
+                      description={`GPS Active • Accuracy: ${currentLocation.accuracy ? `${currentLocation.accuracy.toFixed(0)}m` : 'Unknown'} • Updated: ${new Date(currentLocation.timestamp).toLocaleTimeString()}`}
+                      pinColor="#34A853"
+                    >
+                      <View style={styles.liveLocationMarker}>
+                        <View style={styles.liveLocationIcon}>
+                          <Ionicons name="location" size={16} color="#FFFFFF" />
+                        </View>
+                        <View style={styles.liveLocationPulse} />
+                      </View>
+                    </Marker>
+                    
+                    {/* Accuracy circle with pulsing effect */}
+                    {currentLocation.accuracy && (
+                      <Circle
+                        center={{
+                          latitude: currentLocation.latitude,
+                          longitude: currentLocation.longitude,
+                        }}
+                        radius={currentLocation.accuracy}
+                        strokeColor="rgba(52, 168, 83, 0.6)"
+                        fillColor="rgba(52, 168, 83, 0.15)"
+                        strokeWidth={3}
+                      />
+                    )}
+                    
+                    {/* Additional accuracy rings for better visualization */}
+                    {currentLocation.accuracy && (
+                      <>
+                        <Circle
+                          center={{
+                            latitude: currentLocation.latitude,
+                            longitude: currentLocation.longitude,
+                          }}
+                          radius={currentLocation.accuracy * 0.5}
+                          strokeColor="rgba(52, 168, 83, 0.4)"
+                          fillColor="rgba(52, 168, 83, 0.05)"
+                          strokeWidth={2}
+                        />
+                        <Circle
+                          center={{
+                            latitude: currentLocation.latitude,
+                            longitude: currentLocation.longitude,
+                          }}
+                          radius={currentLocation.accuracy * 1.5}
+                          strokeColor="rgba(52, 168, 83, 0.2)"
+                          fillColor="rgba(52, 168, 83, 0.02)"
+                          strokeWidth={1}
+                        />
+                      </>
+                    )}
+                  </>
                 )}
 
                 {/* Available jobs markers */}
                 {nearbyJobs.map((job) => (
                   <Marker
                     key={job.id}
-                    coordinate={job.pickupAddress.coordinates}
-                    title={job.wasteType}
-                    description={`${job.pricing.total} • ${job.distance}km away`}
-                    pinColor="#34A853"
+                    coordinate={job.coordinates}
+                    title={job.type}
+                    description={`${job.earnings} • ${job.distance?.toFixed(1)}km away`}
+                    pinColor={MAPS_CONFIG.MARKERS.JOB.color}
                     onPress={() => handleJobPress(job)}
                   />
                 ))}
@@ -328,6 +593,7 @@ const ContractorDashboard = ({ navigation }) => {
                 )}
               </MapView>
             )}
+            
           </View>
         </View>
 
@@ -335,7 +601,9 @@ const ContractorDashboard = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Available Jobs Near You</Text>
           {isOnline ? (
-            <AvailableJobsList jobs={nearbyJobs} onJobPress={handleJobOffer} />
+            <View style={styles.jobsListContainer}>
+              <AvailableJobsList />
+            </View>
           ) : (
             <View style={styles.offlineState}>
               <Ionicons name="moon-outline" size={48} color="#9CA3AF" />
@@ -344,7 +612,7 @@ const ContractorDashboard = ({ navigation }) => {
             </View>
           )}
         </View>
-
+      </ScrollView>
 
       {/* Job Offer Modal */}
       <Modal
@@ -364,23 +632,22 @@ const ContractorDashboard = ({ navigation }) => {
           {activeJob && (
             <View style={styles.modalContent}>
               <View style={styles.jobOfferCard}>
-                <Text style={styles.jobOfferType}>{activeJob.wasteType}</Text>
+                <Text style={styles.jobOfferType}>{activeJob.type}</Text>
                 <Text style={styles.jobOfferDetails}>{activeJob.volume}</Text>
-                <Text style={styles.jobOfferAddress}>{activeJob.pickupAddress.street}, {activeJob.pickupAddress.city}</Text>
+                <Text style={styles.jobOfferAddress}>{activeJob.address}</Text>
                 
                 <View style={styles.offerStats}>
                   <View style={styles.offerStat}>
                     <Ionicons name="location" size={20} color="#6B7280" />
-                    <Text style={styles.offerStatText}>{activeJob.distance} km</Text>
+                    <Text style={styles.offerStatText}>{activeJob.distance}</Text>
                   </View>
                   <View style={styles.offerStat}>
                     <Ionicons name="cash" size={20} color="#34A853" />
-                    <Text style={styles.offerStatText}>${activeJob.pricing.total}</Text>
+                    <Text style={styles.offerStatText}>{activeJob.earnings}</Text>
                   </View>
-                  {/* Customer name is not available in the job object from CreateOrder, so this will be a placeholder */}
                   <View style={styles.offerStat}>
                     <Ionicons name="person" size={20} color="#6B7280" />
-                    <Text style={styles.offerStatText}>Customer</Text>
+                    <Text style={styles.offerStatText}>{activeJob.customerName}</Text>
                   </View>
                 </View>
               </View>
@@ -407,7 +674,6 @@ const ContractorDashboard = ({ navigation }) => {
   );
 };
 
-// ... (Styles remain the same)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -593,6 +859,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
+  jobsListContainer: {
+    height: 400, // Fixed height to prevent VirtualizedList nesting
+  },
   locationRequiredView: {
     height: 250,
     justifyContent: 'center',
@@ -629,6 +898,226 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  refreshLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#34A853',
+    marginTop: 12,
+  },
+  refreshLocationText: {
+    color: '#34A853',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  locationStatusOverlay: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    zIndex: 1000,
+  },
+  realtimeLocationCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  locationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'rgba(52, 168, 83, 0.05)',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  locationIconContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  locationPulse: {
+    position: 'absolute',
+    top: -2,
+    left: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(52, 168, 83, 0.3)',
+    borderWidth: 2,
+    borderColor: '#34A853',
+    opacity: 0.6,
+  },
+  locationInfo: {
+    flex: 1,
+  },
+  locationTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  locationSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  locationStatusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#34A853',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    marginRight: 4,
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  locationDetails: {
+    padding: 16,
+  },
+  coordinateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  coordinateLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+    flex: 1,
+  },
+  coordinateValue: {
+    fontSize: 12,
+    color: '#1F2937',
+    fontWeight: '600',
+    fontFamily: 'monospace',
+    flex: 2,
+    textAlign: 'right',
+  },
+  visualLocationContainer: {
+    padding: 16,
+    backgroundColor: 'rgba(248, 250, 252, 0.8)',
+  },
+  locationVisualization: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  gpsIndicator: {
+    position: 'relative',
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gpsCenter: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#34A853',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  gpsRing1: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(52, 168, 83, 0.6)',
+    zIndex: 1,
+  },
+  gpsRing2: {
+    position: 'absolute',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 168, 83, 0.4)',
+    zIndex: 2,
+  },
+  gpsRing3: {
+    position: 'absolute',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 168, 83, 0.2)',
+    zIndex: 3,
+  },
+  locationLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  accuracyText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  updateTime: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  liveLocationMarker: {
+    position: 'relative',
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  liveLocationIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#34A853',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+    zIndex: 2,
+  },
+  liveLocationPulse: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(52, 168, 83, 0.3)',
+    zIndex: 1,
   },
   modalContainer: {
     flex: 1,
@@ -732,6 +1221,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
 });
 

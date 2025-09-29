@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
 import SharedHeader from '../components/SharedHeader';
 import LocationService from '../services/LocationService';
+import MAPS_CONFIG from '../config/mapsConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -164,12 +165,10 @@ const EmployeeDashboard = ({ navigation }) => {
           <View style={styles.mapContainer}>
             <MapView
               style={styles.map}
-              initialRegion={{
-                latitude: 33.7490,
-                longitude: -84.3880,
-                latitudeDelta: 0.0922,
-                longitudeDelta: 0.0421,
-              }}
+              provider="google"
+              initialRegion={MAPS_CONFIG.DEFAULT_REGION}
+              customMapStyle={MAPS_CONFIG.MAP_STYLE}
+              mapType="standard"
             >
               {activeJobs.map((job) => (
                 <Marker
@@ -177,7 +176,7 @@ const EmployeeDashboard = ({ navigation }) => {
                   coordinate={job.location}
                   title={`${job.contractor} - ${job.type}`}
                   description={job.status}
-                  pinColor={job.status === 'In Progress' ? '#FF8F00' : '#34A853'}
+                  pinColor={job.status === 'In Progress' ? MAPS_CONFIG.MARKERS.JOB.color : MAPS_CONFIG.MARKERS.CONTRACTOR.color}
                 />
               ))}
               {contractors.map((contractor) => (
@@ -186,7 +185,7 @@ const EmployeeDashboard = ({ navigation }) => {
                   coordinate={contractor.location}
                   title={contractor.name}
                   description={`${contractor.status} - Rating: ${contractor.rating}`}
-                  pinColor={contractor.status === 'Online' ? '#1E88E5' : '#FF5722'}
+                  pinColor={contractor.status === 'Online' ? MAPS_CONFIG.MARKERS.CONTRACTOR.color : '#FF5722'}
                 />
               ))}
             </MapView>

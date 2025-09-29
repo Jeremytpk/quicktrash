@@ -20,6 +20,8 @@ const LOCATION_REQUESTED_KEY_PREFIX = '@QuickTrash:location_requested_';
 
 class LocationService {
   constructor() {
+
+    // Default to Atlanta, GA coordinates
     this.currentLocation = {
       latitude: 33.7490,
       longitude: -84.3880,
@@ -43,6 +45,8 @@ class LocationService {
     }
   }
 
+
+  // Mark that location has been requested for a user
   async markLocationRequested(userId) {
     try {
       await AsyncStorage.setItem(`${LOCATION_REQUESTED_KEY_PREFIX}${userId}`, 'true');
@@ -50,12 +54,54 @@ class LocationService {
       console.error('Error marking location requested:', error);
     }
   }
-  
-  // (requestPermissions method remains largely the same)
-  async requestPermissions(userId = null, isFirstTime = false) { /* ... no changes needed here ... */ }
 
-  // --- Core Location Methods (Now with better error handling) ---
+  // Request location permissions with first-time user flow
+  async requestPermissions(userId = null, isFirstTime = false) {
+    try {
+      const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+      
+      if (foregroundStatus !== 'granted') {
+        const message = isFirstTime 
+          ? 'Welcome to QuickTrash! To provide you with the best experience and show you relevant content based on your location, we need access to your location.'
+          : 'QuickTrash needs location access to show you nearby jobs and provide navigation. Please enable location permissions in your device settings.';
+        
+        Alert.alert(
+          isFirstTime ? 'Welcome to QuickTrash!' : 'Location Permission Required',
+          message,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: isFirstTime ? 'Allow Location' : 'Open Settings', onPress: () => Location.requestForegroundPermissionsAsync() }
+          ]
+        );
+        return false;
+      }
 
+      // Mark that we've requested location for this user
+      if (userId && isFirstTime) {
+        await this.markLocationRequested(userId);
+      }
+      // For contractors, we also need background location for job tracking
+      const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+      if (backgroundStatus !== 'granted') {
+        Alert.alert(
+          'Background Location Required',
+          'To track your progress during pickups and provide accurate ETAs to customers, QuickTrash needs background location access.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Allow', onPress: () => Location.requestBackgroundPermissionsAsync() }
+
+          ]
+        );
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error requesting location permissions:', error);
+      return false;
+    }
+  }
+
+  // Get current location
   async getCurrentLocation() {
     try {
       const hasPermission = await this.requestPermissions();
@@ -134,45 +180,90 @@ class LocationService {
   // (getNearbyJobs now uses the CONFIG value as a default)
   async getNearbyJobs(jobs, maxDistance = CONFIG.DEFAULT_MAX_DISTANCE_KM) { /* ... */ }
 
-  // IMPROVEMENT: Replaced mock function with a real Google Directions API call
-  async generateRoute(destination) {
-    if (!this.currentLocation || this.currentLocation.isDefault || !destination) return null;
-    if (!GOOGLE_MAPS_API_KEY) {
-        console.error("Google Maps API key is missing. Please check your .env file.");
-        Alert.alert("Configuration Error", "Could not calculate route due to a configuration issue.");
-        return null;
+  // Get nearby jobs based on current location
+  async getNearbyJobs(jobs, maxDistance = 25) {
+    const currentLocation = await this.getCurrentLocation();
+    if (!currentLocation) return [];
+
+    return jobs.filter(job => {
+      if (!job.location?.coordinates) return false;
+      
+      const distance = this.calculateDistance(
+        currentLocation.latitude,
+        currentLocation.longitude,
+        job.location.coordinates.lat,
+        job.location.coordinates.lng
+      );
+
+      return distance <= maxDistance;
+    }).map(job => ({
+      ...job,
+      distance: this.calculateDistance(
+        currentLocation.latitude,
+        currentLocation.longitude,
+        job.location.coordinates.lat,
+        job.location.coordinates.lng
+      )
+    })).sort((a, b) => a.distance - b.distance);
+  }
+
+  // Generate route to a destination
+  generateRoute(destination) {
+    if (!this.currentLocation || !destination) return null;
+
+    // This would typically integrate with Google Maps Directions API
+    // For now, returning a simple route object
+    return {
+      origin: this.currentLocation,
+      destination: destination,
+      distance: this.calculateDistance(
+        this.currentLocation.latitude,
+        this.currentLocation.longitude,
+        destination.latitude,
+        destination.longitude
+      ),
+      estimatedTime: this.estimateTravelTime(
+        this.calculateDistance(
+          this.currentLocation.latitude,
+          this.currentLocation.longitude,
+          destination.latitude,
+          destination.longitude
+        )
+      )
+    };
+  }
+
+  // Estimate travel time based on distance
+  estimateTravelTime(distanceKm) {
+    // Assuming average speed of 40 km/h in urban areas
+    const avgSpeed = 40;
+    const timeHours = distanceKm / avgSpeed;
+    const timeMinutes = Math.round(timeHours * 60);
+    return timeMinutes;
+  }
+
+  // Open navigation in external app (Google Maps, Apple Maps)
+  async openNavigation(destination, destinationName = 'Destination') {
+    const currentLocation = await this.getCurrentLocation();
+    if (!currentLocation) {
+      Alert.alert('Error', 'Unable to get your current location for navigation.');
+      return;
     }
 
+    const url = Platform.select({
+      ios: `maps:?saddr=${currentLocation.latitude},${currentLocation.longitude}&daddr=${destination.latitude},${destination.longitude}&dirflg=d`,
+      android: `google.navigation:q=${destination.latitude},${destination.longitude}`
+    });
+
     try {
-      const origin = `${this.currentLocation.latitude},${this.currentLocation.longitude}`;
-      const dest = `${destination.latitude},${destination.longitude}`;
-      const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${dest}&key=${GOOGLE_MAPS_API_KEY}`;
-
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.status !== 'OK' || !data.routes?.[0]) {
-        throw new Error(data.error_message || 'Could not find a route.');
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        // Fallback to web-based Google Maps
+        const webUrl = `https://www.google.com/maps/dir/${currentLocation.latitude},${currentLocation.longitude}/${destination.latitude},${destination.longitude}`;
+        await Linking.openURL(webUrl);
       }
-
-      const route = data.routes[0];
-      const leg = route.legs[0];
-
-      // Decode the polyline to get coordinates for drawing on the map
-      const points = polyline.decode(route.overview_polyline.points);
-      const coordinates = points.map(point => ({
-        latitude: point[0],
-        longitude: point[1],
-      }));
-      
-      return {
-        coordinates, // Array of {latitude, longitude} for the Polyline component
-        distance: leg.distance.text, // e.g., "12.3 km"
-        duration: leg.duration.text, // e.g., "15 mins"
-        distanceValue: leg.distance.value, // distance in meters
-        durationValue: leg.duration.value, // duration in seconds
-      };
-
     } catch (error) {
       console.error("Error generating route:", error);
       Alert.alert("Routing Error", "Failed to calculate the route to the destination.");
