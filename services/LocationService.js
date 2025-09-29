@@ -1,10 +1,8 @@
 import * as Location from 'expo-location';
-import { Alert, Platform, Linking } from 'react-react-native';
+import { Alert, Platform, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // IMPROVEMENT: Import package to decode polylines from Google Directions API
 import polyline from '@mapbox/polyline';
-// IMPROVEMENT: Import the API key securely from the .env file
-import { GOOGLE_MAPS_API_KEY } from '@env';
 
 // IMPROVEMENT: Centralized configuration for easy tweaking
 const CONFIG = {
