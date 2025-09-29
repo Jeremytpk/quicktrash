@@ -164,11 +164,8 @@ class NewLocationService {
           distanceInterval: 10, // 10 meters
         },
         (location) => {
-          console.log('📍 Location update received:', {
-            lat: location.coords.latitude,
-            lng: location.coords.longitude,
-            accuracy: location.coords.accuracy
-          });
+          // Location logging disabled to prevent console spam
+          // Enable this for debugging: console.log('📍 Location update received:', {...});
 
           this.currentLocation = {
             latitude: location.coords.latitude,
