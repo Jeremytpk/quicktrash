@@ -400,17 +400,4 @@ const styles = StyleSheet.create({
     noJobsText: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 20 },
 });
 
-// Cleanup on unmount
-useEffect(() => {
-  return () => {
-    console.log('🧹 Cleaning up location services...');
-    if (locationPolling) {
-      locationPolling.remove();
-      setLocationPolling(null);
-    }
-    LocationService.stopWatching();
-    console.log('✅ Location services cleaned up');
-  };
-}, []);
-
 export default ContractorDashboard;
