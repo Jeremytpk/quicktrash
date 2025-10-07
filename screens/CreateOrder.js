@@ -19,6 +19,8 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 import SharedHeader from '../components/SharedHeader';
 import OrderBasket from '../components/OrderBasket';
+import PaymentModal from '../components/PaymentModal';
+import { initializeStripe } from '../services/PaymentService';
 
 const { width } = Dimensions.get('window');
 
@@ -34,6 +36,8 @@ const CreateOrder = ({ navigation, route }) => {
   const [photos, setPhotos] = useState([]);
   const [pricing, setPricing] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [orderData, setOrderData] = useState(null);
   
   // Manual address states
   const [isManualAddress, setIsManualAddress] = useState(false);
@@ -208,58 +212,78 @@ const CreateOrder = ({ navigation, route }) => {
       return;
     }
 
+    // Prepare order data for payment
+    const preparedOrderData = {
+      customerId: auth.currentUser.uid,
+      contractorId: null,
+      status: 'pending_payment',
+      
+      wasteType: selectedWasteType,
+      volume: selectedVolume,
+      description: description.trim(),
+      
+      pickupAddress: isManualAddress ? {
+        street: manualAddress.street.trim(),
+        city: manualAddress.city.trim(),
+        state: manualAddress.state.trim(),
+        zipCode: manualAddress.zipCode.trim(),
+        fullAddress: getFullManualAddress(),
+        coordinates: null,
+        instructions: description.trim(),
+        isManualEntry: true
+      } : {
+        ...pickupLocation.address,
+        fullAddress: `${pickupLocation.address.street}, ${pickupLocation.address.city}, ${pickupLocation.address.state} ${pickupLocation.address.zipCode}`,
+        coordinates: pickupLocation.coordinates,
+        instructions: description.trim(),
+        isManualEntry: false
+      },
+      
+      scheduledPickup: isASAP ? null : scheduledDate,
+      isASAP,
+      
+      pricing,
+      
+      photos: {
+        beforePickup: [],
+        afterPickup: [],
+        disposalProof: []
+      },
+      
+      createdAt: serverTimestamp(),
+      
+      services: {
+        weLoadService: false,
+        urgentPickup: isASAP
+      }
+    };
+
+    setOrderData(preparedOrderData);
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentSuccess = async (paymentResult) => {
     setLoading(true);
     try {
-      const orderData = {
-        customerId: auth.currentUser.uid,
-        contractorId: null,
+      // Update order with payment info
+      const finalOrderData = {
+        ...orderData,
         status: 'pending',
-        
-        wasteType: selectedWasteType,
-        volume: selectedVolume,
-        description: description.trim(),
-        
-        pickupAddress: isManualAddress ? {
-          street: manualAddress.street.trim(),
-          city: manualAddress.city.trim(),
-          state: manualAddress.state.trim(),
-          zipCode: manualAddress.zipCode.trim(),
-          fullAddress: getFullManualAddress(),
-          coordinates: null, // No GPS coordinates for manual address
-          instructions: description.trim(),
-          isManualEntry: true
-        } : {
-          ...pickupLocation.address,
-          fullAddress: `${pickupLocation.address.street}, ${pickupLocation.address.city}, ${pickupLocation.address.state} ${pickupLocation.address.zipCode}`,
-          coordinates: pickupLocation.coordinates,
-          instructions: description.trim(),
-          isManualEntry: false
-        },
-        
-        scheduledPickup: isASAP ? null : scheduledDate,
-        isASAP,
-        
-        pricing,
-        
-        photos: {
-          beforePickup: [], // Photos would be uploaded to storage first
-          afterPickup: [],
-          disposalProof: []
-        },
-        
-        createdAt: serverTimestamp(),
-        
-        services: {
-          weLoadService: false,
-          urgentPickup: isASAP
+        payment: {
+          id: paymentResult.id,
+          amount: pricing?.total || 0,
+          currency: 'usd',
+          status: 'completed',
+          processedAt: serverTimestamp()
         }
       };
 
-      const docRef = await addDoc(collection(db, 'jobs'), orderData);
+      const docRef = await addDoc(collection(db, 'jobs'), finalOrderData);
       
+      setShowPaymentModal(false);
       Alert.alert(
-        'Order Created!',
-        'Your pickup request has been submitted. We\'ll notify you when a picker accepts your job.',
+        'Order Created Successfully!',
+        'Your pickup request has been submitted and payment processed. We\'ll notify you when a picker accepts your job.',
         [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]
@@ -270,6 +294,11 @@ const CreateOrder = ({ navigation, route }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePaymentError = (error) => {
+    setShowPaymentModal(false);
+    Alert.alert('Payment Failed', error.message || 'Please try again.');
   };
 
   const selectedWasteTypeInfo = wasteTypes.find(w => w.id === selectedWasteType);
@@ -539,6 +568,15 @@ const CreateOrder = ({ navigation, route }) => {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Payment Modal */}
+      <PaymentModal
+        visible={showPaymentModal}
+        amount={pricing?.total || 0}
+        onSuccess={handlePaymentSuccess}
+        onError={handlePaymentError}
+        onCancel={() => setShowPaymentModal(false)}
+      />
     </View>
   );
 };
