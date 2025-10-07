@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
 // import OrderBasket from '../components/OrderBasket'; // Removed OrderBasket
 import LocationService from '../services/LocationService';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker } from '../components/WebCompatibleMap';
 import * as Location from 'expo-location';
 
 const { width } = Dimensions.get('window');

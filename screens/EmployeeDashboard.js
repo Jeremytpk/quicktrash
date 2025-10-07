@@ -10,7 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker } from '../components/WebCompatibleMap';
 import SharedHeader from '../components/SharedHeader';
 import LocationService from '../services/LocationService';
 import MAPS_CONFIG from '../config/mapsConfig';

@@ -17,7 +17,7 @@ import { db } from '../firebaseConfig';
 import SharedHeader from '../components/SharedHeader';
 import * as Location from 'expo-location';
 import { auth } from '../firebaseConfig';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker } from '../components/WebCompatibleMap';
 
 const { width } = Dimensions.get('window');
 
