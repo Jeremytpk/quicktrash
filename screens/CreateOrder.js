@@ -11,7 +11,9 @@ import {
   Image,
   Dimensions,
   Switch,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -33,6 +35,9 @@ const CreateOrder = ({ navigation, route }) => {
   const [pickupLocation, setPickupLocation] = useState(null);
   const [isASAP, setIsASAP] = useState(true);
   const [scheduledDate, setScheduledDate] = useState(null);
+  const [scheduledTime, setScheduledTime] = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [photos, setPhotos] = useState([]);
   const [pricing, setPricing] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -63,7 +68,7 @@ const CreateOrder = ({ navigation, route }) => {
       name: '1-5 Bags', 
       description: 'Small household bags',
       icon: 'bag',
-      basePrice: 15
+      basePrice: 1
     },
     { 
       id: 'pickup_load', 
@@ -173,6 +178,79 @@ const CreateOrder = ({ navigation, route }) => {
     });
   };
 
+  // Date and Time handling functions
+  const handleDateChange = (event, selectedDate) => {
+    const currentDate = selectedDate || scheduledDate;
+    setShowDatePicker(Platform.OS === 'ios');
+    
+    if (selectedDate) {
+      // Ensure the selected date is not in the past
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (selectedDate < today) {
+        Alert.alert('Invalid Date', 'Please select a future date for pickup.');
+        return;
+      }
+      
+      setScheduledDate(selectedDate);
+      
+      // If no time is selected yet, default to 9 AM
+      if (!scheduledTime) {
+        const defaultTime = new Date(selectedDate);
+        defaultTime.setHours(9, 0, 0, 0);
+        setScheduledTime(defaultTime);
+      }
+    }
+  };
+
+  const handleTimeChange = (event, selectedTime) => {
+    const currentTime = selectedTime || scheduledTime;
+    setShowTimePicker(Platform.OS === 'ios');
+    
+    if (selectedTime) {
+      // Validate business hours (7 AM to 7 PM)
+      const hours = selectedTime.getHours();
+      if (hours < 7 || hours >= 19) {
+        Alert.alert('Invalid Time', 'Please select a time between 7:00 AM and 7:00 PM.');
+        return;
+      }
+      
+      setScheduledTime(selectedTime);
+    }
+  };
+
+  const formatScheduledDateTime = () => {
+    if (!scheduledDate) return 'Select Date & Time';
+    
+    const dateStr = scheduledDate.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+    
+    const timeStr = scheduledTime ? scheduledTime.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }) : '9:00 AM';
+    
+    return `${dateStr} at ${timeStr}`;
+  };
+
+  const getMinimumDate = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    return tomorrow;
+  };
+
+  const getMaximumDate = () => {
+    const maxDate = new Date();
+    maxDate.setDate(maxDate.getDate() + 30); // Allow scheduling up to 30 days in advance
+    return maxDate;
+  };
+
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
@@ -212,6 +290,29 @@ const CreateOrder = ({ navigation, route }) => {
       return;
     }
 
+    // Validate scheduling if not ASAP
+    if (!isASAP) {
+      if (!scheduledDate) {
+        Alert.alert('Missing Information', 'Please select a pickup date.');
+        return;
+      }
+      if (!scheduledTime) {
+        Alert.alert('Missing Information', 'Please select a pickup time.');
+        return;
+      }
+      
+      // Ensure scheduled time is at least 24 hours from now
+      const now = new Date();
+      const scheduledDateTime = new Date(scheduledDate);
+      scheduledDateTime.setHours(scheduledTime.getHours(), scheduledTime.getMinutes(), 0, 0);
+      
+      const hoursDifference = (scheduledDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+      if (hoursDifference < 24) {
+        Alert.alert('Invalid Schedule', 'Please schedule pickup at least 24 hours in advance.');
+        return;
+      }
+    }
+
     // Prepare order data for payment
     const preparedOrderData = {
       customerId: auth.currentUser.uid,
@@ -239,7 +340,16 @@ const CreateOrder = ({ navigation, route }) => {
         isManualEntry: false
       },
       
-      scheduledPickup: isASAP ? null : scheduledDate,
+      scheduledPickup: isASAP ? null : {
+        date: scheduledDate,
+        time: scheduledTime,
+        formattedDateTime: formatScheduledDateTime(),
+        timestamp: (() => {
+          const dateTime = new Date(scheduledDate);
+          dateTime.setHours(scheduledTime.getHours(), scheduledTime.getMinutes(), 0, 0);
+          return dateTime;
+        })()
+      },
       isASAP,
       
       pricing,
@@ -498,7 +608,11 @@ const CreateOrder = ({ navigation, route }) => {
           <View style={styles.schedulingOptions}>
             <TouchableOpacity
               style={[styles.schedulingOption, isASAP && styles.selectedOption]}
-              onPress={() => setIsASAP(true)}
+              onPress={() => {
+                setIsASAP(true);
+                setScheduledDate(null);
+                setScheduledTime(null);
+              }}
             >
               <Ionicons name="flash" size={20} color={isASAP ? "#FFFFFF" : "#34A853"} />
               <Text style={[styles.optionText, isASAP && styles.selectedOptionText]}>
@@ -516,6 +630,91 @@ const CreateOrder = ({ navigation, route }) => {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Date/Time Selection when Schedule Later is selected */}
+          {!isASAP && (
+            <View style={styles.dateTimeContainer}>
+              <Text style={styles.dateTimeLabel}>Select Pickup Date & Time</Text>
+              
+              <View style={styles.dateTimeRow}>
+                <TouchableOpacity
+                  style={styles.dateTimeButton}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Ionicons name="calendar-outline" size={20} color="#34A853" />
+                  <Text style={styles.dateTimeButtonText}>
+                    {scheduledDate ? scheduledDate.toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                    }) : 'Select Date'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.dateTimeButton, !scheduledDate && styles.dateTimeButtonDisabled]}
+                  onPress={() => scheduledDate && setShowTimePicker(true)}
+                  disabled={!scheduledDate}
+                >
+                  <Ionicons 
+                    name="time-outline" 
+                    size={20} 
+                    color={scheduledDate ? "#34A853" : "#9CA3AF"} 
+                  />
+                  <Text style={[
+                    styles.dateTimeButtonText,
+                    !scheduledDate && styles.dateTimeButtonTextDisabled
+                  ]}>
+                    {scheduledTime ? scheduledTime.toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true,
+                    }) : 'Select Time'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {scheduledDate && scheduledTime && (
+                <View style={styles.scheduleSummary}>
+                  <Ionicons name="checkmark-circle" size={16} color="#34A853" />
+                  <Text style={styles.scheduleSummaryText}>
+                    Pickup scheduled for {formatScheduledDateTime()}
+                  </Text>
+                </View>
+              )}
+
+              <Text style={styles.scheduleNote}>
+                • Available Monday - Saturday, 7:00 AM - 7:00 PM{'\n'}
+                • Schedule at least 24 hours in advance{'\n'}
+                • Weather conditions may affect pickup time
+              </Text>
+            </View>
+          )}
+
+          {/* Date/Time Pickers */}
+          {showDatePicker && (
+            <DateTimePicker
+              testID="datePicker"
+              value={scheduledDate || getMinimumDate()}
+              mode="date"
+              is24Hour={false}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleDateChange}
+              minimumDate={getMinimumDate()}
+              maximumDate={getMaximumDate()}
+            />
+          )}
+
+          {showTimePicker && scheduledDate && (
+            <DateTimePicker
+              testID="timePicker"
+              value={scheduledTime || new Date()}
+              mode="time"
+              is24Hour={false}
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleTimeChange}
+            />
+          )}
         </View>
 
         {/* Pricing Summary */}
@@ -573,9 +772,10 @@ const CreateOrder = ({ navigation, route }) => {
       <PaymentModal
         visible={showPaymentModal}
         amount={pricing?.total || 0}
-        onSuccess={handlePaymentSuccess}
-        onError={handlePaymentError}
-        onCancel={() => setShowPaymentModal(false)}
+        onPaymentSuccess={handlePaymentSuccess}
+        onPaymentError={handlePaymentError}
+        onClose={() => setShowPaymentModal(false)}
+        orderData={orderData}
       />
     </View>
   );
@@ -833,6 +1033,67 @@ const styles = StyleSheet.create({
   selectedOptionText: {
     color: '#FFFFFF',
   },
+  dateTimeContainer: {
+    marginTop: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+  },
+  dateTimeLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12,
+  },
+  dateTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  dateTimeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  dateTimeButtonDisabled: {
+    backgroundColor: '#F9FAFB',
+    opacity: 0.6,
+  },
+  dateTimeButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginLeft: 8,
+  },
+  dateTimeButtonTextDisabled: {
+    color: '#9CA3AF',
+  },
+  scheduleSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  scheduleSummaryText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#166534',
+    marginLeft: 8,
+  },
+  scheduleNote: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 16,
+    fontStyle: 'italic',
+  },
   pricingCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -875,6 +1136,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+    paddingBottom: 40,
   },
   createButton: {
     backgroundColor: '#34A853',
