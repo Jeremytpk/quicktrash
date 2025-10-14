@@ -12,15 +12,18 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { 
-  createPaymentIntent, 
+  createPaymentMethod, 
   processStripePayment, 
   initializeStripe,
   PaymentService 
 } from '../services/PaymentService';
+import PaymentStatusModal from './PaymentStatusModal';
 
 // Conditionally import Stripe components for mobile only
 let CardField;
-if (Platform.OS !== 'web') {
+const isWeb = Platform.OS === 'web';
+
+if (!isWeb) {
   try {
     const stripe = require('@stripe/stripe-react-native');
     CardField = stripe.CardField;
@@ -31,12 +34,20 @@ if (Platform.OS !== 'web') {
 
 const PaymentModal = ({ visible, onClose, onPaymentSuccess, onPaymentError, orderData, amount }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentIntent, setPaymentIntent] = useState(null);
   const [stripeInitialized, setStripeInitialized] = useState(false);
+  const [cardValid, setCardValid] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState(null); // 'success', 'failed', 'processing'
+  const [paymentResult, setPaymentResult] = useState(null);
+  const [paymentError, setPaymentError] = useState(null);
 
   // Initialize Stripe when modal opens
   useEffect(() => {
-    if (visible && Platform.OS !== 'web') {
+    if (visible && !isWeb) {
+      // Log payment mode info to console (hidden from users)
+      const paymentModeInfo = PaymentService.getPaymentModeInfo();
+      console.log(`${paymentModeInfo.icon} Payment Mode: ${paymentModeInfo.mode}`);
+      console.log(`📋 Payment Description: ${paymentModeInfo.description}`);
+      
       initializeStripeService();
     }
   }, [visible]);
@@ -48,32 +59,6 @@ const PaymentModal = ({ visible, onClose, onPaymentSuccess, onPaymentError, orde
     } catch (error) {
       console.error('Failed to initialize Stripe:', error);
       Alert.alert('Payment Error', 'Failed to initialize payment system. Please try again.');
-    }
-  };
-
-  const createPaymentIntentForOrder = async () => {
-    try {
-      setIsProcessing(true);
-      
-      // Validate amount
-      PaymentService.validatePaymentAmount(amount);
-      
-      // Create payment intent
-      const intent = await createPaymentIntent(
-        amount,
-        'usd',
-        orderData?.customerId,
-        orderData
-      );
-      
-      setPaymentIntent(intent);
-      return intent;
-    } catch (error) {
-      console.error('Error creating payment intent:', error);
-      Alert.alert('Payment Error', error.message || 'Failed to prepare payment. Please try again.');
-      return null;
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -91,44 +76,67 @@ const PaymentModal = ({ visible, onClose, onPaymentSuccess, onPaymentError, orde
       return;
     }
 
-    try {
-      setIsProcessing(true);
+    if (!cardValid) {
+      Alert.alert('Invalid Card', 'Please enter valid card information.');
+      return;
+    }
 
-      // Create payment intent if not already created
-      let intent = paymentIntent;
-      if (!intent) {
-        intent = await createPaymentIntentForOrder();
-        if (!intent) return;
+    try {
+      // Show processing status
+      setPaymentStatus('processing');
+      setIsProcessing(true);
+      
+      // Validate amount
+      PaymentService.validatePaymentAmount(amount);
+
+      // Create payment method using the CardField
+      const paymentMethod = await createPaymentMethod();
+
+      if (!paymentMethod) {
+        throw new Error('Failed to create payment method');
       }
 
-      // Process payment with Stripe
-      const paymentResult = await processStripePayment(
-        intent.client_secret,
-        {
-          type: 'Card',
-        }
-      );
+      // Process payment with the payment method
+      const result = await processStripePayment(paymentMethod, amount);
 
-      if (paymentResult.status === 'Succeeded') {
-        onPaymentSuccess({
-          id: paymentResult.id,
+      if (result.status === 'Succeeded') {
+        // Show success status
+        setPaymentResult({
+          id: result.id,
           amount: amount,
           currency: 'usd',
           status: 'succeeded',
-          paymentMethod: paymentResult.paymentMethod
+          paymentMethod: result.paymentMethod
         });
+        setPaymentStatus('success');
         
-        // Reset state
-        setPaymentIntent(null);
+        // Reset card state
+        setCardValid(false);
       } else {
         throw new Error('Payment was not successful');
       }
       
     } catch (error) {
       console.error('Payment processing error:', error);
-      onPaymentError(error);
+      // Show error status
+      setPaymentError(error.message || 'Payment processing failed');
+      setPaymentStatus('failed');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleStatusModalClose = () => {
+    if (paymentStatus === 'success') {
+      // Payment succeeded, call success handler and close main modal
+      onPaymentSuccess(paymentResult);
+      setPaymentStatus(null);
+      setPaymentResult(null);
+      onClose();
+    } else if (paymentStatus === 'failed') {
+      // Payment failed, just close status modal and stay on payment form
+      setPaymentStatus(null);
+      setPaymentError(null);
     }
   };
 
@@ -177,10 +185,15 @@ const PaymentModal = ({ visible, onClose, onPaymentSuccess, onPaymentError, orde
                     cardStyle={{
                       backgroundColor: '#FFFFFF',
                       textColor: '#000000',
+                      borderColor: '#E5E7EB',
+                      borderWidth: 1,
+                      borderRadius: 8,
+                      fontSize: 14,
                     }}
                     style={styles.cardField}
                     onCardChange={(cardDetails) => {
                       console.log('Card details:', cardDetails);
+                      setCardValid(cardDetails.complete && !cardDetails.validNumber === false);
                     }}
                   />
                 ) : (
@@ -202,10 +215,10 @@ const PaymentModal = ({ visible, onClose, onPaymentSuccess, onPaymentError, orde
           <TouchableOpacity
             style={[
               styles.payButton, 
-              (isProcessing || Platform.OS === 'web' || !stripeInitialized) && styles.payButtonDisabled
+              (isProcessing || Platform.OS === 'web' || !stripeInitialized || !cardValid) && styles.payButtonDisabled
             ]}
             onPress={Platform.OS === 'web' ? () => Alert.alert('Mobile App Required', 'Please use the mobile app for payments') : processPayment}
-            disabled={isProcessing || Platform.OS === 'web' || !stripeInitialized}
+            disabled={isProcessing || Platform.OS === 'web' || !stripeInitialized || !cardValid}
           >
             {isProcessing ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -225,8 +238,24 @@ const PaymentModal = ({ visible, onClose, onPaymentSuccess, onPaymentError, orde
               : 'Your payment is secured by Stripe'
             }
           </Text>
+          
+          {Platform.OS !== 'web' && (
+            <Text style={styles.testCardNote}>
+              For testing, use card: 4242 4242 4242 4242, any future date, any CVV
+            </Text>
+          )}
         </View>
       </SafeAreaView>
+
+      {/* Payment Status Modal */}
+      <PaymentStatusModal
+        visible={paymentStatus !== null}
+        status={paymentStatus}
+        onClose={handleStatusModalClose}
+        amount={amount}
+        paymentId={paymentResult?.id}
+        errorMessage={paymentError}
+      />
     </Modal>
   );
 };
@@ -351,6 +380,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 50,
     marginVertical: 8,
+    paddingHorizontal: 4,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -373,6 +403,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  testCardNote: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
 });
 

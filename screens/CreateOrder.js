@@ -22,6 +22,7 @@ import { auth, db } from '../firebaseConfig';
 import SharedHeader from '../components/SharedHeader';
 import OrderBasket from '../components/OrderBasket';
 import PaymentModal from '../components/PaymentModal';
+import PaymentStatusModal from '../components/PaymentStatusModal';
 import { initializeStripe } from '../services/PaymentService';
 
 const { width } = Dimensions.get('window');
@@ -43,6 +44,8 @@ const CreateOrder = ({ navigation, route }) => {
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [orderData, setOrderData] = useState(null);
+  const [showOrderSuccess, setShowOrderSuccess] = useState(false);
+  const [createdOrder, setCreatedOrder] = useState(null);
   
   // Manual address states
   const [isManualAddress, setIsManualAddress] = useState(false);
@@ -390,14 +393,18 @@ const CreateOrder = ({ navigation, route }) => {
 
       const docRef = await addDoc(collection(db, 'jobs'), finalOrderData);
       
+      // Store order info for success modal
+      setCreatedOrder({
+        id: docRef.id,
+        amount: pricing?.total || 0,
+        paymentId: paymentResult.id,
+        wasteType: selectedWasteType,
+        scheduledPickup: !isASAP ? formatScheduledDateTime() : 'ASAP'
+      });
+      
       setShowPaymentModal(false);
-      Alert.alert(
-        'Order Created Successfully!',
-        'Your pickup request has been submitted and payment processed. We\'ll notify you when a picker accepts your job.',
-        [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]
-      );
+      setShowOrderSuccess(true);
+      
     } catch (error) {
       console.error('Error creating order:', error);
       Alert.alert('Error', 'Failed to create your order. Please try again.');
@@ -776,6 +783,20 @@ const CreateOrder = ({ navigation, route }) => {
         onPaymentError={handlePaymentError}
         onClose={() => setShowPaymentModal(false)}
         orderData={orderData}
+      />
+
+      {/* Order Success Modal */}
+      <PaymentStatusModal
+        visible={showOrderSuccess}
+        status="success"
+        onClose={() => {
+          setShowOrderSuccess(false);
+          navigation.goBack();
+        }}
+        amount={createdOrder?.amount}
+        paymentId={createdOrder?.paymentId}
+        title="Order Created Successfully! 🎉"
+        message={`Your ${createdOrder?.wasteType} pickup has been scheduled${createdOrder?.scheduledPickup !== 'ASAP' ? ` for ${createdOrder?.scheduledPickup}` : ' ASAP'}. We'll notify you when a contractor accepts your job.`}
       />
     </View>
   );

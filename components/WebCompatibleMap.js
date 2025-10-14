@@ -1,40 +1,69 @@
-import { Platform } from 'react-native';
+import React from 'react';
+import { Platform, View, Text } from 'react-native';
 
 // Web-compatible maps component
-let MapView, Marker;
+let MapView, Marker, Circle;
 
 if (Platform.OS === 'web') {
-  // For web, we'll use a placeholder or Google Maps JavaScript API
+  // For web, use React Native components instead of DOM elements
   MapView = ({ children, style, ...props }) => {
-    return (
-      <div style={{
-        ...style,
+    const Component = ({ children, style, ...props }) => (
+      <View style={[{
         backgroundColor: '#e1e5e9',
-        display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        flexDirection: 'column'
-      }}>
-        <div style={{ fontSize: 16, color: '#666', marginBottom: 10 }}>
+        minHeight: 200,
+        flex: 1
+      }, style]}>
+        <Text style={{ fontSize: 16, color: '#666', marginBottom: 10 }}>
           Map View (Web Version)
-        </div>
-        <div style={{ fontSize: 12, color: '#999' }}>
+        </Text>
+        <Text style={{ fontSize: 12, color: '#999', textAlign: 'center' }}>
           Location services available on mobile app
-        </div>
+        </Text>
         {children}
-      </div>
+      </View>
     );
+    
+    Component.Circle = ({ children, ...props }) => <View>{children}</View>;
+    
+    return <Component style={style} {...props}>{children}</Component>;
   };
   
+  // Add Circle as a property of MapView for web
+  MapView.Circle = ({ children, ...props }) => <View>{children}</View>;
+  
   Marker = ({ children, ...props }) => {
-    return <div>{children}</div>;
+    return <View>{children}</View>;
   };
+  
+  Circle = ({ children, ...props }) => <View>{children}</View>;
 } else {
   // For mobile, use react-native-maps
-  const Maps = require('react-native-maps');
-  MapView = Maps.default;
-  Marker = Maps.Marker;
+  try {
+    const Maps = require('react-native-maps');
+    MapView = Maps.default || Maps;
+    Marker = Maps.Marker;
+    Circle = Maps.Circle;
+    
+    // Ensure Circle is attached to MapView
+    if (MapView && !MapView.Circle) {
+      MapView.Circle = Circle;
+    }
+  } catch (error) {
+    console.warn('react-native-maps not available, using fallback');
+    // Fallback components
+    MapView = ({ children, style, ...props }) => (
+      <View style={[{ backgroundColor: '#e1e5e9', minHeight: 200 }, style]}>
+        <Text>Map not available</Text>
+        {children}
+      </View>
+    );
+    MapView.Circle = ({ children }) => <View>{children}</View>;
+    Marker = ({ children }) => <View>{children}</View>;
+    Circle = ({ children }) => <View>{children}</View>;
+  }
 }
 
-export { MapView, Marker };
+export { Marker, Circle };
 export default MapView;

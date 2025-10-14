@@ -167,7 +167,7 @@ const AvailableJobs = () => {
         {/* Jobs List */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Available Jobs</Text>
+            <Text style={styles.sectionTitle}>Available Jobs (Within 5 Miles)</Text>
             <TouchableOpacity style={styles.sortButton}>
               <Ionicons name="swap-vertical" size={16} color="#6B7280" />
               <Text style={styles.sortText}>Sort by Distance</Text>

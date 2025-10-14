@@ -27,6 +27,8 @@ import ErrorScreen from './screens/ErrorScreen';
 import LocationDebugScreen from './components/LocationDebugScreen';
 import LocationTestSimple from './components/LocationTestSimple';
 import LocationVerification from './components/LocationVerification';
+import NavigationScreen from './screens/NavigationScreen';
+import JobDetailsScreen from './screens/JobDetailsScreen';
 
 // Customer screens
 import PaymentMethods from './screens/PaymentMethods';
@@ -223,6 +225,16 @@ function App() {
             name="Analytics" 
             component={Analytics} 
             options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="NavigationScreen" 
+            component={NavigationScreen} 
+            options={{ title: 'Navigation', headerTitleAlign: 'center' }} 
+          />
+          <Stack.Screen 
+            name="JobDetailsScreen" 
+            component={JobDetailsScreen} 
+            options={{ title: 'Job Details', headerTitleAlign: 'center' }} 
           />
         </Stack.Navigator>
       </NavigationContainer>
