@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,96 +9,173 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../firebaseConfig';
 
 const { width } = Dimensions.get('window');
 
 const Earnings = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('week'); // week, month, year
-  
-  const earningsData = {
-    week: {
-      total: 485.50,
-      jobs: 12,
-      average: 40.46,
-      trend: '+12%',
-      breakdown: [
-        { day: 'Mon', amount: 95.50, jobs: 3 },
-        { day: 'Tue', amount: 67.25, jobs: 2 },
-        { day: 'Wed', amount: 0, jobs: 0 },
-        { day: 'Thu', amount: 123.75, jobs: 4 },
-        { day: 'Fri', amount: 88.00, jobs: 2 },
-        { day: 'Sat', amount: 111.00, jobs: 1 },
-        { day: 'Sun', amount: 0, jobs: 0 },
-      ]
-    },
-    month: {
-      total: 2150.75,
-      jobs: 52,
-      average: 41.36,
-      trend: '+8%',
-      breakdown: [
-        { week: 'Week 1', amount: 485.50, jobs: 12 },
-        { week: 'Week 2', amount: 567.25, jobs: 14 },
-        { week: 'Week 3', amount: 523.00, jobs: 13 },
-        { week: 'Week 4', amount: 575.00, jobs: 13 },
-      ]
-    },
-    year: {
-      total: 25800.00,
-      jobs: 620,
-      average: 41.61,
-      trend: '+15%',
-      breakdown: [
-        { month: 'Jan', amount: 2150.75, jobs: 52 },
-        { month: 'Feb', amount: 1980.50, jobs: 48 },
-        { month: 'Mar', amount: 2340.25, jobs: 58 },
-        { month: 'Apr', amount: 2210.00, jobs: 54 },
-        { month: 'May', amount: 2450.75, jobs: 61 },
-        { month: 'Jun', amount: 2180.25, jobs: 53 },
-        { month: 'Jul', amount: 2520.50, jobs: 63 },
-        { month: 'Aug', amount: 2380.00, jobs: 59 },
-        { month: 'Sep', amount: 2190.75, jobs: 54 },
-        { month: 'Oct', amount: 2250.50, jobs: 56 },
-        { month: 'Nov', amount: 2065.00, jobs: 51 },
-        { month: 'Dec', amount: 2070.00, jobs: 51 },
-      ]
+
+  // Live jobs for this contractor
+  const [jobs, setJobs] = useState([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+
+  useEffect(() => {
+    if (!auth?.currentUser) {
+      setJobs([]);
+      setLoadingJobs(false);
+      return;
     }
-  };
+
+    const jobsRef = collection(db, 'jobs');
+    const q = query(
+      jobsRef,
+      where('contractorId', '==', auth.currentUser.uid),
+      where('status', '==', 'completed')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        completedAt: d.data().completedAt?.toDate?.() || (d.data().completedAt instanceof Date ? d.data().completedAt : null),
+      }));
+
+      // sort newest first
+      list.sort((a, b) => {
+        if (!a.completedAt || !b.completedAt) return 0;
+        return b.completedAt - a.completedAt;
+      });
+
+      setJobs(list);
+      setLoadingJobs(false);
+    }, (error) => {
+      console.error('Error loading contractor jobs for earnings:', error);
+      setJobs([]);
+      setLoadingJobs(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const earningsData = useMemo(() => {
+    // Helper to safely get contractor payout value from a job
+    const payoutFor = (job) => {
+      return Number(job.pricing?.contractorPayout ?? job.contractorPayout ?? 0) || 0;
+    };
+
+    const now = new Date();
+
+    // Week: last 7 days (including today)
+    const weekDays = Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date();
+      d.setDate(now.getDate() - (6 - i)); // oldest -> newest
+      return { date: d, label: d.toLocaleDateString(undefined, { weekday: 'short' }), amount: 0, jobs: 0 };
+    });
+
+    // Month: 4 weekly buckets covering last 28 days (Week 1..4)
+    const monthWeeks = [0,1,2,3].map(i => ({ label: `Week ${i+1}`, amount: 0, jobs: 0 }));
+
+    // Year: months Jan..Dec
+    const monthNames = Array.from({ length: 12 }).map((_, i) => new Date(now.getFullYear(), i, 1).toLocaleString(undefined, { month: 'short' }));
+    const yearMonths = monthNames.map(name => ({ month: name, amount: 0, jobs: 0 }));
+
+    let weekTotal = 0, weekJobs = 0;
+    let monthTotal = 0, monthJobs = 0;
+    let yearTotal = 0, yearJobs = 0;
+
+    jobs.forEach(job => {
+      const completed = job.completedAt;
+      if (!completed) return;
+      const amt = payoutFor(job);
+
+      // Week (last 7 days)
+      const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      if (completed >= sevenDaysAgo && completed <= now) {
+        // find matching day slot
+        const slotIndex = weekDays.findIndex(w => w.date.toDateString() === completed.toDateString());
+        if (slotIndex >= 0) {
+          weekDays[slotIndex].amount += amt;
+          weekDays[slotIndex].jobs += 1;
+        }
+        weekTotal += amt;
+        weekJobs += 1;
+      }
+
+      // Month (last 28 days grouped into 4 weeks)
+      const twentyEightDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 27);
+      if (completed >= twentyEightDaysAgo && completed <= now) {
+        const daysDiff = Math.floor((now - completed) / (1000*60*60*24)); // 0..27
+        const weekIndex = Math.floor(daysDiff / 7); // 0..3
+        const bucket = 3 - weekIndex; // reverse so Week 1 is oldest
+        if (bucket >= 0 && bucket < 4) {
+          monthWeeks[bucket].amount += amt;
+          monthWeeks[bucket].jobs += 1;
+        }
+        monthTotal += amt;
+        monthJobs += 1;
+      }
+
+      // Year (calendar year months)
+      if (completed.getFullYear() === now.getFullYear()) {
+        const m = completed.getMonth();
+        yearMonths[m].amount += amt;
+        yearMonths[m].jobs += 1;
+        yearTotal += amt;
+        yearJobs += 1;
+      }
+    });
+
+    const weekAvg = weekJobs ? weekTotal / weekJobs : 0;
+    const monthAvg = monthJobs ? monthTotal / monthJobs : 0;
+    const yearAvg = yearJobs ? yearTotal / yearJobs : 0;
+
+    return {
+      week: {
+        total: weekTotal,
+        jobs: weekJobs,
+        average: weekAvg,
+        trend: weekJobs ? `${Math.round((weekTotal / Math.max(1, weekJobs)) * 100) / 100}` : '+0%',
+        breakdown: weekDays.map(d => ({ day: d.label, amount: d.amount, jobs: d.jobs }))
+      },
+      month: {
+        total: monthTotal,
+        jobs: monthJobs,
+        average: monthAvg,
+        trend: monthJobs ? '+0%' : '+0%',
+        breakdown: monthWeeks.map(w => ({ week: w.label, amount: w.amount, jobs: w.jobs }))
+      },
+      year: {
+        total: yearTotal,
+        jobs: yearJobs,
+        average: yearAvg,
+        trend: yearJobs ? '+0%' : '+0%',
+        breakdown: yearMonths.map(m => ({ month: m.month, amount: m.amount, jobs: m.jobs }))
+      }
+    };
+  }, [jobs]);
 
   const currentData = earningsData[selectedPeriod];
 
-  const recentPayouts = [
-    {
-      id: '1',
-      date: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      amount: 125.50,
-      jobs: 3,
+  // Compute recent payouts from completed jobs (group by payout date or most recent jobs)
+  const recentPayouts = useMemo(() => {
+    // Show the most recent 6 completed jobs as payouts entries (you can change grouping to weekly payouts if needed)
+    return jobs.slice(0, 6).map(j => ({
+      id: j.id,
+      date: j.completedAt || new Date(),
+      amount: Number(j.pricing?.contractorPayout ?? j.contractorPayout ?? 0) || 0,
+      jobs: 1,
       status: 'completed',
-      period: 'Jan 8-14, 2025'
-    },
-    {
-      id: '2',
-      date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-      amount: 98.75,
-      jobs: 2,
-      status: 'completed',
-      period: 'Jan 1-7, 2025'
-    },
-    {
-      id: '3',
-      date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-      amount: 156.25,
-      jobs: 4,
-      status: 'completed',
-      period: 'Dec 25-31, 2024'
-    },
-  ];
+      period: j.completedAt ? j.completedAt.toLocaleDateString() : ''
+    }));
+  }, [jobs]);
 
   const getBarHeight = (amount, maxAmount) => {
     return Math.max((amount / maxAmount) * 120, 4);
   };
 
-  const maxAmount = Math.max(...currentData.breakdown.map(item => item.amount));
+  const maxAmount = Math.max(1, ...(currentData.breakdown.map(item => item.amount || 0)));
 
   const renderPeriodButton = (period, label) => (
     <TouchableOpacity
