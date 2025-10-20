@@ -97,8 +97,7 @@ const SideMenu = ({ visible, onClose }) => {
 
   // --- Menu structure logic remains the same ---
   const getMenuSections = () => {
-    console.log('SideMenu - Current userRole:', userRole);
-    console.log('SideMenu - Current user:', user);
+    // Debug logs removed to reduce console noise in production
     switch (userRole) {
       case 'customer':
         return [

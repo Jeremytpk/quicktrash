@@ -4,7 +4,7 @@ import { View, Image, Text, StyleSheet, Dimensions, Platform } from 'react-nativ
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const Logo = ({ 
-  size = 'medium', // 'small', 'medium', 'large', 'xlarge', or number
+  size = 60, // 'small', 'medium', 'large', 'xlarge', or number
   showText = false, 
   variant = 'default', // 'default', 'header', 'splash', 'menu'
   style = {},
@@ -95,11 +95,11 @@ const styles = StyleSheet.create({
   },
   logoImage: {
     backgroundColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 6,
+    //shadowColor: '#000',
+   //shadowOffset: { width: 1, height: 2 },
+    //shadowOpacity: 0.2,
+    //shadowRadius: 4,
+    //elevation: 6,
   },
   brandText: {
     color: '#1F2937',

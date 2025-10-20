@@ -888,12 +888,6 @@ const ContractorDashboard = ({ navigation, route }) => {
           </View>
         }
         showBackButton={false}
-        rightComponent={
-          <TouchableOpacity style={styles.notificationButton}>
-            <Ionicons name="notifications-outline" size={24} color="#333" />
-            <View style={styles.notificationBadge}><Text style={styles.badgeText}>2</Text></View>
-          </TouchableOpacity>
-        }
       />
 
       {isOnline && (
