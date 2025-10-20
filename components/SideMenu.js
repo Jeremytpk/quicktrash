@@ -5,20 +5,20 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
-  SafeAreaView,
   ScrollView,
   Alert,
   Animated,
   Dimensions,
   Pressable,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../contexts/UserContext';
 import Logo from './Logo';
 import { auth } from '../firebaseConfig';
 import { signOut } from 'firebase/auth';
-import JobMonitoring from '../screens/JobMonitoring';
+// Removed direct screen imports to avoid require cycles
 
 const { width } = Dimensions.get('window');
 const menuWidth = 320;
@@ -80,16 +80,25 @@ const SideMenu = ({ visible, onClose }) => {
     }
   };
 
-  const handleNavigation = (JobMonitoring) => {
+  const handleNavigation = (screen) => {
     handleClose(); // Use animated close
     // A slight delay ensures the animation is smooth before navigating
     setTimeout(() => {
-        navigation.navigate(Analytics);
+        if (typeof screen === 'string') {
+          try {
+            navigation.navigate(screen);
+          } catch (error) {
+            console.error('Navigation error:', error);
+            Alert.alert('Navigation Error', `Could not navigate to ${screen}`);
+          }
+        }
     }, 150);
   };
 
   // --- Menu structure logic remains the same ---
   const getMenuSections = () => {
+    console.log('SideMenu - Current userRole:', userRole);
+    console.log('SideMenu - Current user:', user);
     switch (userRole) {
       case 'customer':
         return [
@@ -99,6 +108,7 @@ const SideMenu = ({ visible, onClose }) => {
               { title: 'Dashboard', icon: 'home-outline', screen: 'CustomerDashboard' },
               { title: 'Create Order', icon: 'add-circle-outline', screen: 'CreateOrder' },
               { title: 'Order History', icon: 'time-outline', screen: 'OrderHistory' },
+              { title: 'My Ratings', icon: 'star-outline', screen: 'MyRatings' },
             ]
           },
           {
@@ -143,6 +153,7 @@ const SideMenu = ({ visible, onClose }) => {
               { title: 'Profile', icon: 'person-outline', screen: 'Profile' },
               { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
               { title: 'Settings', icon: 'settings-outline', screen: 'Settings' },
+              { title: 'My Ratings', icon: 'star-outline', screen: 'MyRatings' },
               { title: 'Help & FAQ', icon: 'help-circle-outline', screen: 'HelpFAQ' },
             ]
           }
@@ -172,6 +183,7 @@ const SideMenu = ({ visible, onClose }) => {
               { title: 'Profile', icon: 'person-outline', screen: 'Profile' },
               { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
               { title: 'Settings', icon: 'settings-outline', screen: 'Settings' },
+              { title: 'My Ratings', icon: 'star-outline', screen: 'MyRatings' },
               { title: 'Help & FAQ', icon: 'help-circle-outline', screen: 'HelpFAQ' },
             ]
           }
@@ -185,6 +197,7 @@ const SideMenu = ({ visible, onClose }) => {
               { title: 'Profile', icon: 'person-outline', screen: 'Profile' },
               { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
               { title: 'Settings', icon: 'settings-outline', screen: 'Settings' },
+              { title: 'My Ratings', icon: 'star-outline', screen: 'MyRatings' },
               { title: 'Help & FAQ', icon: 'help-circle-outline', screen: 'HelpFAQ' },
             ]
           }

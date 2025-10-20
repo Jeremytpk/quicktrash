@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.quicktrash.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,15 +22,10 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.jeremytpk.quicktrash"
+      "package": "com.quicktrash.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "41d00a6b-1a36-48f9-a462-69f6bed08b86"
-      }
     }
   }
 }

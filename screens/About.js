@@ -192,7 +192,7 @@ const About = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   content: {
     flex: 1,
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     borderRadius: 8,
     marginBottom: 8,
   },

@@ -546,7 +546,7 @@ const CreateOrder = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
   },
 
   content: {
@@ -684,7 +684,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   addressInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     borderRadius: 8,
     padding: 12,
     fontSize: 16,

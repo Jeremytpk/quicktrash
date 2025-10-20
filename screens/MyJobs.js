@@ -21,8 +21,11 @@ import {
   onSnapshot, 
   doc, 
   updateDoc,
-  serverTimestamp 
+  serverTimestamp,
+  addDoc,
+  increment
 } from 'firebase/firestore';
+import RateUserModal from '../components/RateUserModal';
 
 const MyJobs = () => {
   const { user } = useUser();
@@ -32,6 +35,8 @@ const MyJobs = () => {
   const [selectedJob, setSelectedJob] = useState(null);
   const [showJobDetails, setShowJobDetails] = useState(false);
   const [filter, setFilter] = useState('active'); // active, completed, all
+  const [showRateModal, setShowRateModal] = useState(false);
+  const [rateContext, setRateContext] = useState(null); // { jobId, customerId, customerName }
 
   // Mock jobs data - in real app, fetch from Firebase
   useEffect(() => {
@@ -190,6 +195,17 @@ const MyJobs = () => {
                 )
               );
               Alert.alert('Success', 'Job completed! Payment will be processed shortly.');
+
+              // Show rating modal for contractor to rate customer
+              const completedJob = jobs.find(j => j.id === jobId);
+              if (completedJob) {
+                setRateContext({
+                  jobId: completedJob.id,
+                  customerId: completedJob.customerId,
+                  customerName: completedJob.customerName,
+                });
+                setShowRateModal(true);
+              }
             } catch (error) {
               Alert.alert('Error', 'Failed to complete job');
             }
@@ -437,6 +453,40 @@ const MyJobs = () => {
           </View>
         )}
       </Modal>
+
+      {/* Rate Customer Modal */}
+      <RateUserModal
+        visible={showRateModal}
+        onClose={() => setShowRateModal(false)}
+        title={rateContext?.customerName ? `Rate ${rateContext.customerName}` : 'Rate Customer'}
+        onSubmit={async ({ rating, review }) => {
+          try {
+            if (!rateContext || !auth.currentUser) return;
+            // Create rating document
+            await addDoc(collection(db, 'ratings'), {
+              jobId: rateContext.jobId,
+              raterId: auth.currentUser.uid,
+              raterRole: 'contractor',
+              ratedUserId: rateContext.customerId,
+              rating,
+              review: review || '',
+              createdAt: serverTimestamp(),
+            });
+
+            // Update aggregates on rated user's doc
+            const ratedUserRef = doc(db, 'users', rateContext.customerId);
+            await updateDoc(ratedUserRef, {
+              'ratings.count': increment(1),
+              'ratings.sum': increment(rating),
+            });
+          } catch (e) {
+            console.error('Error submitting rating:', e);
+          } finally {
+            setShowRateModal(false);
+            setRateContext(null);
+          }
+        }}
+      />
     </View>
   );
 };
@@ -444,7 +494,7 @@ const MyJobs = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   filterContainer: {
     flexDirection: 'row',
@@ -579,7 +629,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -676,7 +726,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#374151',
     lineHeight: 22,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     padding: 12,
     borderRadius: 8,
   },

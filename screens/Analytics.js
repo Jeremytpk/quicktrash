@@ -76,18 +76,102 @@ const Analytics = ({ navigation }) => {
   };
 
   useEffect(() => {
-    setAnalyticsData(mockData);
-    setLoading(false);
+    fetchAnalyticsData();
   }, []);
+
+  const fetchAnalyticsData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch all jobs
+      const jobsQuery = query(collection(db, 'jobs'));
+      const jobsSnapshot = await getDocs(jobsQuery);
+      
+      // Fetch all contractors
+      const contractorsQuery = query(
+        collection(db, 'users'),
+        where('role', '==', 'contractor')
+      );
+      const contractorsSnapshot = await getDocs(contractorsQuery);
+      
+      // Fetch all ratings
+      const ratingsQuery = query(collection(db, 'ratings'));
+      const ratingsSnapshot = await getDocs(ratingsQuery);
+      
+      // Process jobs data
+      let totalRevenue = 0;
+      let jobsByStatus = {
+        completed: 0,
+        in_progress: 0,
+        pending: 0,
+        cancelled: 0
+      };
+      
+      jobsSnapshot.forEach(doc => {
+        const job = doc.data();
+        
+        // Calculate revenue
+        if (job.pricing?.total) {
+          totalRevenue += job.pricing.total;
+        }
+        
+        // Count by status
+        const status = job.status || 'pending';
+        if (jobsByStatus.hasOwnProperty(status)) {
+          jobsByStatus[status]++;
+        }
+      });
+      
+      // Process contractors data
+      const topDrivers = [];
+      contractorsSnapshot.forEach(doc => {
+        const contractor = doc.data();
+        const performance = contractor.contractorData?.performance;
+        
+        if (performance) {
+          topDrivers.push({
+            id: doc.id,
+            name: contractor.displayName || 'Unknown Driver',
+            rating: performance.rating || 0,
+            jobs: performance.totalJobs || 0,
+            status: contractor.contractorData.availability?.isOnline ? 'Online' : 'Offline',
+            earnings: `$${performance.totalEarnings || 0}`,
+            phone: contractor.phoneNumber || 'N/A',
+            email: contractor.email || 'N/A'
+          });
+        }
+      });
+      
+      // Sort by jobs completed (descending)
+      topDrivers.sort((a, b) => b.jobs - a.jobs);
+      
+      // Calculate average job price
+      const avgJobPrice = jobsSnapshot.size > 0 ? totalRevenue / jobsSnapshot.size : 0;
+      
+      const realAnalyticsData = {
+        totalJobs: jobsSnapshot.size,
+        totalRevenue: totalRevenue,
+        avgJobPrice: avgJobPrice,
+        jobsByStatus: jobsByStatus,
+        topDrivers: topDrivers.slice(0, 10) // Top 10 drivers
+      };
+      
+      setAnalyticsData(realAnalyticsData);
+      
+    } catch (error) {
+      console.error('Error fetching analytics data:', error);
+      // Fallback to mock data if Firebase fails
+      setAnalyticsData(mockData);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const onRefresh = () => {
     setRefreshing(true);
-    setLoading(true);
-    setTimeout(() => {
-      setAnalyticsData(mockData);
-      setLoading(false);
+    fetchAnalyticsData().finally(() => {
       setRefreshing(false);
-    }, 1000);
+    });
   };
 
   const handleDriverPress = (driver) => {
@@ -281,7 +365,7 @@ const Analytics = ({ navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
   },
   container: {
     flex: 1,
@@ -401,7 +485,7 @@ const styles = StyleSheet.create({
   // Modal Styles
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
   },
   modalHeader: {
     flexDirection: 'row',

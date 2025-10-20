@@ -145,7 +145,7 @@ const TermsConditions = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   content: {
     flex: 1,
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     color: '#374151',
     lineHeight: 24,
     marginBottom: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     padding: 16,
     borderRadius: 8,
     borderLeftWidth: 4,

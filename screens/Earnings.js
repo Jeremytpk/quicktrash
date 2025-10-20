@@ -281,7 +281,7 @@ const Earnings = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   downloadButton: {
     flexDirection: 'row',
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
   paymentSchedule: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     padding: 12,
     borderRadius: 8,
     gap: 8,

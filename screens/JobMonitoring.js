@@ -295,7 +295,7 @@ const JobMonitoring = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
   },
   listContent: {
     paddingHorizontal: 20,
@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
   },
   modalHeader: {
     flexDirection: 'row',

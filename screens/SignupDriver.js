@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
   imageButton: {
     width: 120,
     height: 120,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#ffffff',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',

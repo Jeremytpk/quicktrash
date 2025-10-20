@@ -43,6 +43,9 @@ import UserManagement from './screens/UserManagement';
 import SignupDriver from './screens/SignupDriver';
 import JobMonitoring from './screens/JobMonitoring';
 import Analytics from './screens/Analytics';
+import MyRatings from './screens/MyRatings';
+import Disputes from './screens/Disputes';
+import AdminTools from './screens/AdminTools';
 
 
 // Create the stack navigator
@@ -224,6 +227,21 @@ function App() {
             component={Analytics} 
             options={{ headerShown: false }} 
           />
+          <Stack.Screen 
+            name="Disputes" 
+            component={Disputes} 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="AdminTools" 
+            component={AdminTools} 
+            options={{ headerShown: false }} 
+          />
+        <Stack.Screen 
+          name="MyRatings" 
+          component={MyRatings} 
+          options={{ headerShown: false }} 
+        />
         </Stack.Navigator>
       </NavigationContainer>
     </UserProvider>

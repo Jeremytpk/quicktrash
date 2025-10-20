@@ -274,7 +274,7 @@ const Notifications = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   markAllButton: {
     paddingHorizontal: 12,

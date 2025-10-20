@@ -14,17 +14,43 @@ import MapView, { Marker } from 'react-native-maps';
 import SharedHeader from '../components/SharedHeader';
 import LocationService from '../services/LocationService';
 import MAPS_CONFIG from '../config/mapsConfig';
+import { db } from '../firebaseConfig';
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  onSnapshot, 
+  orderBy, 
+  limit,
+  Timestamp 
+} from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
 const EmployeeDashboard = ({ navigation }) => {
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [selectedDispute, setSelectedDispute] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  // Real Firebase data state
+  const [dashboardStats, setDashboardStats] = useState({
+    activeJobs: 0,
+    availableDrivers: 0,
+    completedToday: 0,
+    revenue: 0,
+    avgRating: 0,
+    disputes: 0,
+  });
+  
+  const [activeJobs, setActiveJobs] = useState([]);
+  const [pendingDisputes, setPendingDisputes] = useState([]);
+  const [contractors, setContractors] = useState([]);
 
   useEffect(() => {
     // Initialize location service for employees (with Atlanta default)
     const initLocation = async () => {
-      // Get current location (defaults to Atlanta if no permission)
       const location = await LocationService.getCurrentLocation();
       if (location) {
         setCurrentLocation(location);
@@ -32,81 +58,179 @@ const EmployeeDashboard = ({ navigation }) => {
     };
 
     initLocation();
+    fetchDashboardData();
   }, []);
-  const [selectedDispute, setSelectedDispute] = useState(null);
 
-  // Mock data for admin dashboard
-  const [dashboardStats] = useState({
-    activeJobs: 12,
-    availableDrivers: 8,
-    completedToday: 27,
-    revenue: '$1,234',
-    avgRating: 4.7,
-    disputes: 3,
-  });
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch active jobs
+      const activeJobsQuery = query(
+        collection(db, 'jobs'),
+        where('status', 'in', ['assigned', 'in_progress'])
+      );
+      
+      // Fetch available contractors
+      const contractorsQuery = query(
+        collection(db, 'users'),
+        where('role', '==', 'contractor'),
+        where('contractorData.availability.isOnline', '==', true)
+      );
+      
+      // Fetch today's completed jobs
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const completedJobsQuery = query(
+        collection(db, 'jobs'),
+        where('status', '==', 'completed'),
+        where('completedAt', '>=', Timestamp.fromDate(today))
+      );
+      
+      // Fetch pending disputes
+      const disputesQuery = query(
+        collection(db, 'disputes'),
+        where('status', 'in', ['pending', 'investigating'])
+      );
+      
+      // Fetch all contractors for map
+      const allContractorsQuery = query(
+        collection(db, 'users'),
+        where('role', '==', 'contractor')
+      );
 
-  const [activeJobs] = useState([
-    {
-      id: 1,
-      customer: 'Sarah Johnson',
-      contractor: 'Mike Davis',
-      type: 'Household Trash',
-      status: 'In Progress',
-      location: { latitude: 33.7490, longitude: -84.3880 },
-      startTime: '2:30 PM',
-      estimatedCompletion: '3:15 PM',
-    },
-    {
-      id: 2,
-      customer: 'Robert Smith',
-      contractor: 'Lisa Chen',
-      type: 'Bulk Items',
-      status: 'Pickup Complete',
-      location: { latitude: 33.7590, longitude: -84.3780 },
-      startTime: '1:45 PM',
-      estimatedCompletion: '2:45 PM',
-    },
-  ]);
+      // Execute all queries
+      const [
+        activeJobsSnapshot,
+        contractorsSnapshot,
+        completedJobsSnapshot,
+        disputesSnapshot,
+        allContractorsSnapshot
+      ] = await Promise.all([
+        getDocs(activeJobsQuery),
+        getDocs(contractorsQuery),
+        getDocs(completedJobsQuery),
+        getDocs(disputesQuery),
+        getDocs(allContractorsQuery)
+      ]);
 
-  const [pendingDisputes] = useState([
-    {
-      id: 1,
-      customer: 'John Doe',
-      contractor: 'Mark Wilson',
-      issue: 'Trash was more than described',
-      priority: 'High',
-      createdAt: '2 hours ago',
-    },
-    {
-      id: 2,
-      customer: 'Emily Brown',
-      contractor: 'Tom Anderson',
-      issue: 'Pickup was late',
-      priority: 'Medium',
-      createdAt: '4 hours ago',
-    },
-  ]);
+      // Process active jobs
+      const jobsData = [];
+      activeJobsSnapshot.forEach(doc => {
+        const job = doc.data();
+        jobsData.push({
+          id: doc.id,
+          customer: job.customerId, // Will need to fetch customer name separately
+          contractor: job.contractorId, // Will need to fetch contractor name separately
+          type: job.wasteType,
+          status: job.status === 'assigned' ? 'Assigned' : 'In Progress',
+          location: job.pickupAddress?.coordinates || { latitude: 33.7490, longitude: -84.3880 },
+          startTime: job.startedAt ? new Date(job.startedAt.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Not started',
+          estimatedCompletion: job.estimatedCompletion || 'TBD',
+        });
+      });
+      setActiveJobs(jobsData);
 
-  const [contractors] = useState([
-    {
-      id: 1,
-      name: 'Mike Davis',
-      status: 'Online',
-      rating: 4.8,
-      jobsToday: 4,
-      earnings: '$180',
-      location: { latitude: 33.7490, longitude: -84.3880 },
-    },
-    {
-      id: 2,
-      name: 'Lisa Chen',
-      status: 'On Job',
-      rating: 4.9,
-      jobsToday: 3,
-      earnings: '$135',
-      location: { latitude: 33.7590, longitude: -84.3780 },
-    },
-  ]);
+      // Process contractors for map
+      const contractorsData = [];
+      allContractorsSnapshot.forEach(doc => {
+        const contractor = doc.data();
+        if (contractor.contractorData?.availability?.currentLocation) {
+          contractorsData.push({
+            id: doc.id,
+            name: contractor.displayName || 'Unknown',
+            status: contractor.contractorData.availability.isOnline ? 'Online' : 'Offline',
+            rating: contractor.contractorData.performance?.rating || 0,
+            jobsToday: contractor.contractorData.performance?.totalJobs || 0,
+            earnings: `$${contractor.contractorData.performance?.totalEarnings || 0}`,
+            location: contractor.contractorData.availability.currentLocation,
+          });
+        }
+      });
+      setContractors(contractorsData);
+
+      // Process disputes
+      const disputesData = [];
+      disputesSnapshot.forEach(doc => {
+        const dispute = doc.data();
+        disputesData.push({
+          id: doc.id,
+          customer: dispute.customerId, // Will need to fetch customer name separately
+          contractor: dispute.contractorId, // Will need to fetch contractor name separately
+          issue: dispute.issue.replace(/_/g, ' '),
+          priority: dispute.priority || 'Medium',
+          createdAt: dispute.createdAt ? new Date(dispute.createdAt.seconds * 1000).toLocaleString() : 'Unknown',
+        });
+      });
+      setPendingDisputes(disputesData);
+
+      // Calculate dashboard stats
+      const totalRevenue = await calculateTotalRevenue();
+      const avgRating = await calculateAverageRating();
+      
+      setDashboardStats({
+        activeJobs: activeJobsSnapshot.size,
+        availableDrivers: contractorsSnapshot.size,
+        completedToday: completedJobsSnapshot.size,
+        revenue: totalRevenue,
+        avgRating: avgRating,
+        disputes: disputesSnapshot.size,
+      });
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculateTotalRevenue = async () => {
+    try {
+      const jobsQuery = query(
+        collection(db, 'jobs'),
+        where('status', '==', 'completed')
+      );
+      const snapshot = await getDocs(jobsQuery);
+      
+      let totalRevenue = 0;
+      snapshot.forEach(doc => {
+        const job = doc.data();
+        if (job.pricing?.total) {
+          totalRevenue += job.pricing.total;
+        }
+      });
+      
+      return totalRevenue;
+    } catch (error) {
+      console.error('Error calculating revenue:', error);
+      return 0;
+    }
+  };
+
+  const calculateAverageRating = async () => {
+    try {
+      const ratingsQuery = query(collection(db, 'ratings'));
+      const snapshot = await getDocs(ratingsQuery);
+      
+      if (snapshot.empty) return 0;
+      
+      let totalRating = 0;
+      let count = 0;
+      
+      snapshot.forEach(doc => {
+        const rating = doc.data();
+        if (rating.rating) {
+          totalRating += rating.rating;
+          count++;
+        }
+      });
+      
+      return count > 0 ? totalRating / count : 0;
+    } catch (error) {
+      console.error('Error calculating average rating:', error);
+      return 0;
+    }
+  };
 
   const handleDisputePress = (dispute) => {
     setSelectedDispute(dispute);
@@ -116,6 +240,24 @@ const EmployeeDashboard = ({ navigation }) => {
   const handleResolveDispute = () => {
     setShowDisputeModal(false);
     setSelectedDispute(null);
+  };
+
+  // Quick Actions handlers
+  const handleApproveDriver = () => {
+    navigation.navigate('UserManagement');
+  };
+
+  const handleSendBroadcast = () => {
+    // For now, show an alert. Later this could navigate to a broadcast screen
+    alert('Broadcast feature coming soon!');
+  };
+
+  const handleViewReports = () => {
+    navigation.navigate('Analytics');
+  };
+
+  const handleManagePartners = () => {
+    navigation.navigate('AdminTools');
   };
 
   return (
@@ -153,7 +295,7 @@ const EmployeeDashboard = ({ navigation }) => {
             </View>
             <View style={[styles.statCard, { backgroundColor: '#9C27B0' }]}>
               <Ionicons name="cash" size={24} color="#FFFFFF" />
-              <Text style={styles.statNumber}>{dashboardStats.revenue}</Text>
+              <Text style={styles.statNumber}>${dashboardStats.revenue.toFixed(2)}</Text>
               <Text style={styles.statLabel}>Revenue</Text>
             </View>
           </View>
@@ -257,19 +399,19 @@ const EmployeeDashboard = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionsGrid}>
-            <TouchableOpacity style={styles.actionCard}>
+            <TouchableOpacity style={styles.actionCard} onPress={handleApproveDriver}>
               <Ionicons name="person-add" size={32} color="#34A853" />
               <Text style={styles.actionText}>Approve Driver</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionCard}>
+            <TouchableOpacity style={styles.actionCard} onPress={handleSendBroadcast}>
               <Ionicons name="chatbubbles" size={32} color="#1E88E5" />
               <Text style={styles.actionText}>Send Broadcast</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionCard}>
+            <TouchableOpacity style={styles.actionCard} onPress={handleViewReports}>
               <Ionicons name="bar-chart" size={32} color="#FF8F00" />
               <Text style={styles.actionText}>View Reports</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionCard}>
+            <TouchableOpacity style={styles.actionCard} onPress={handleManagePartners}>
               <Ionicons name="business" size={32} color="#9C27B0" />
               <Text style={styles.actionText}>Manage Partners</Text>
             </TouchableOpacity>
@@ -332,7 +474,7 @@ const EmployeeDashboard = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
   },
   header: {
     flexDirection: 'row',
@@ -558,7 +700,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
   },
   modalHeader: {
     flexDirection: 'row',

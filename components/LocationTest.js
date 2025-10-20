@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   permissionButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#ffffff',
   },
   locationButton: {
     backgroundColor: '#34A853',

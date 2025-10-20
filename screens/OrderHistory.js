@@ -10,7 +10,8 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp, increment } from 'firebase/firestore';
+import RateUserModal from '../components/RateUserModal';
 import { auth, db } from '../firebaseConfig';
 import SharedHeader from '../components/SharedHeader';
 
@@ -18,6 +19,8 @@ const { width } = Dimensions.get('window');
 
 const OrderHistory = ({ navigation }) => {
   const [orders, setOrders] = useState([]);
+  const [showRateModal, setShowRateModal] = useState(false);
+  const [rateContext, setRateContext] = useState(null); // { jobId, contractorId, contractorName }
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -62,6 +65,13 @@ const OrderHistory = ({ navigation }) => {
 
   const onRefresh = () => {
     setRefreshing(true);
+  };
+
+  const maybePromptRating = (order) => {
+    if (order.status === 'completed' && order.contractorId) {
+      setRateContext({ jobId: order.id, contractorId: order.contractorId, contractorName: order.contractorName });
+      setShowRateModal(true);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -234,6 +244,16 @@ const OrderHistory = ({ navigation }) => {
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           )}
+
+          {item.status === 'completed' && (
+            <TouchableOpacity 
+              style={[styles.reorderButton, { backgroundColor: '#FFF7ED' }]}
+              onPress={() => maybePromptRating(item)}
+            >
+              <Ionicons name="star" size={16} color="#F59E0B" />
+              <Text style={[styles.reorderText, { color: '#9A3412' }]}>Rate Contractor</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -281,6 +301,36 @@ const OrderHistory = ({ navigation }) => {
         }
         ListEmptyComponent={!loading ? renderEmptyState : null}
       />
+
+      <RateUserModal
+        visible={showRateModal}
+        onClose={() => setShowRateModal(false)}
+        title={rateContext?.contractorName ? `Rate ${rateContext.contractorName}` : 'Rate Contractor'}
+        onSubmit={async ({ rating, review }) => {
+          try {
+            if (!rateContext || !auth.currentUser) return;
+            await addDoc(collection(db, 'ratings'), {
+              jobId: rateContext.jobId,
+              raterId: auth.currentUser.uid,
+              raterRole: 'customer',
+              ratedUserId: rateContext.contractorId,
+              rating,
+              review: review || '',
+              createdAt: serverTimestamp(),
+            });
+            const ratedUserRef = doc(db, 'users', rateContext.contractorId);
+            await updateDoc(ratedUserRef, {
+              'ratings.count': increment(1),
+              'ratings.sum': increment(rating),
+            });
+          } catch (e) {
+            console.error('Error submitting customer rating:', e);
+          } finally {
+            setShowRateModal(false);
+            setRateContext(null);
+          }
+        }}
+      />
     </View>
   );
 };
@@ -288,7 +338,7 @@ const OrderHistory = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
   },
   ordersList: {
     flex: 1,

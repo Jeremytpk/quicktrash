@@ -515,7 +515,7 @@ const UserManagement = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   addButton: {
     flexDirection: 'row',
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     borderRadius: 8,
     paddingHorizontal: 12,
     marginBottom: 12,
@@ -677,7 +677,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   modalHeader: {
     flexDirection: 'row',

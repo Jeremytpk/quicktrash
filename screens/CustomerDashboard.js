@@ -363,7 +363,7 @@ const CustomerDashboard = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
   },
   headerActions: {
     flexDirection: 'row',
@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#ffffff',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
   },
   mapFooter: {
     padding: 12,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
   },

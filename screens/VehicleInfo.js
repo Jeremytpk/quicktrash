@@ -296,7 +296,7 @@ const VehicleInfo = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   editButton: {
     flexDirection: 'row',
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   modalHeader: {
     flexDirection: 'row',

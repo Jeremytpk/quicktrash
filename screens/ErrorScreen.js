@@ -58,7 +58,7 @@ const ErrorScreen = ({ route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,

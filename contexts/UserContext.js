@@ -29,7 +29,16 @@ export const UserProvider = ({ children }) => {
           if (userDoc.exists()) {
             const userData = userDoc.data();
             setUser(firebaseUser);
-            setUserRole(userData.role);
+            // Derive role if missing using legacy flags
+            let derivedRole = userData.role;
+            if (!derivedRole) {
+              if (userData.isContractor) derivedRole = 'contractor';
+              else if (userData.isEmployee) derivedRole = 'employee';
+              else if (userData.isCustomer) derivedRole = 'customer';
+            }
+            console.log('UserContext - User data:', userData);
+            console.log('UserContext - Derived role:', derivedRole);
+            setUserRole(derivedRole || null);
             setUserLocation(userData.currentLocation || null);
           } else {
             // User document doesn't exist, might be first login

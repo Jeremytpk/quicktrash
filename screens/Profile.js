@@ -291,7 +291,7 @@ const Profile = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   loadingContainer: {
     flex: 1,
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     borderRadius: 8,
   },
   statValue: {

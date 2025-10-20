@@ -309,7 +309,7 @@ const PaymentMethods = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   addButton: {
     flexDirection: 'row',
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   modalHeader: {
     flexDirection: 'row',

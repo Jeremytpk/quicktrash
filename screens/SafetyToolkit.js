@@ -320,7 +320,7 @@ const SafetyToolkit = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   emergencyButton: {
     flexDirection: 'row',
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
