@@ -45,6 +45,12 @@ import Analytics from './screens/Analytics';
 import MyRatings from './screens/MyRatings';
 import Disputes from './screens/Disputes';
 import AdminTools from './screens/AdminTools';
+import Activities from './screens/Activities';
+import ActivityDetails from './screens/ActivityDetails';
+import ContractorActivities from './screens/ContractorActivities';
+import ContractorDetails from './screens/ContractorDetails';
+import FinancialOperations from './screens/FinancialOperations';
+import TransactionDetails from './screens/TransactionDetails';
 
 
 // Create the stack navigator
@@ -226,16 +232,46 @@ function App() {
             component={Disputes} 
             options={{ headerShown: false }} 
           />
-          <Stack.Screen 
-            name="AdminTools" 
-            component={AdminTools} 
-            options={{ headerShown: false }} 
-          />
-        <Stack.Screen 
-          name="MyRatings" 
-          component={MyRatings} 
-          options={{ headerShown: false }} 
-        />
+              <Stack.Screen
+                name="AdminTools"
+                component={AdminTools}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="Activities"
+                component={Activities}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ActivityDetails"
+                component={ActivityDetails}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ContractorActivities"
+                component={ContractorActivities}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ContractorDetails"
+                component={ContractorDetails}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="FinancialOperations"
+                component={FinancialOperations}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="TransactionDetails"
+                component={TransactionDetails}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="MyRatings"
+                component={MyRatings}
+                options={{ headerShown: false }}
+              />
         </Stack.Navigator>
       </NavigationContainer>
     </UserProvider>

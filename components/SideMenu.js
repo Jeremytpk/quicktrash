@@ -171,6 +171,7 @@ const SideMenu = ({ visible, onClose }) => {
           {
             title: 'Operations',
             items: [
+              { title: 'Activities', icon: 'list-outline', screen: 'Activities' },
               { title: 'Disputes', icon: 'alert-circle-outline', screen: 'Disputes' },
               { title: 'Admin Tools', icon: 'construct-outline', screen: 'AdminTools' },
             ]
