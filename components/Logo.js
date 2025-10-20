@@ -23,23 +23,23 @@ const Logo = ({
     
     switch (variant) {
       case 'splash':
-        return (isTablet ? 120 : 100) * scaleFactor;
+        return (isTablet ? 157.5 : 136.5) * scaleFactor;
       case 'header':
-        return (isTablet ? 40 : 32) * scaleFactor;
+        return (isTablet ? 52.5 : 44.1) * scaleFactor;
       case 'menu':
-        return (isTablet ? 56 : 48) * scaleFactor;
+        return (isTablet ? 73.5 : 63) * scaleFactor;
       default:
         switch (size) {
           case 'small':
-            return (isTablet ? 24 : 20) * scaleFactor;
+            return (isTablet ? 31.5 : 27.3) * scaleFactor;
           case 'medium':
-            return (isTablet ? 40 : 32) * scaleFactor;
+            return (isTablet ? 52.5 : 44.1) * scaleFactor;
           case 'large':
-            return (isTablet ? 64 : 56) * scaleFactor;
+            return (isTablet ? 84 : 73.5) * scaleFactor;
           case 'xlarge':
-            return (isTablet ? 80 : 72) * scaleFactor;
+            return (isTablet ? 105 : 94.5) * scaleFactor;
           default:
-            return (isTablet ? 40 : 32) * scaleFactor;
+            return (isTablet ? 52.5 : 44.1) * scaleFactor;
         }
     }
   };
@@ -50,20 +50,21 @@ const Logo = ({
   };
 
   const logoSize = getLogoSize();
+  const logoHeight = logoSize + 20; // Increase height by 20px
   const textSize = getTextSize();
 
   // Use the QuickTrash logo - responsive and platform-aware
   const logoSource = require('../assets/logo/qt_logo_short.png');
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, { height: logoHeight }, style]}>
       <Image
         source={logoSource}
         style={[
           styles.logoImage,
           { 
             width: logoSize, 
-            height: logoSize,
+            height: logoHeight,
             borderRadius: logoSize / 8, // Slightly rounded corners
           },
           imageStyle
@@ -93,6 +94,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoImage: {
+    backgroundColor: 'transparent',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,

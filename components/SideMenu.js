@@ -135,7 +135,6 @@ const SideMenu = ({ visible, onClose }) => {
             title: 'Work',
             items: [
               { title: 'Dashboard', icon: 'home-outline', screen: 'ContractorDashboard' },
-              { title: 'Available Jobs', icon: 'briefcase-outline', screen: 'AvailableJobs' },
               { title: 'My Jobs', icon: 'checkmark-circle-outline', screen: 'MyJobs' },
               { title: 'Earnings', icon: 'cash-outline', screen: 'Earnings' },
             ]
@@ -343,15 +342,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
   logoSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   userInfo: {
+    marginLeft: 12,
     flex: 1,
   },
   userName: {
@@ -366,7 +368,10 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   closeButton: {
-    padding: 8,
+    padding: 12,
+    marginRight: 4,
+    borderRadius: 8,
+    backgroundColor: '#F9FAFB',
   },
   menuItems: {
     flex: 1,

@@ -32,7 +32,6 @@ import LocationVerification from './components/LocationVerification';
 import PaymentMethods from './screens/PaymentMethods';
 
 // Contractor screens
-import AvailableJobs from './screens/AvailableJobs';
 import MyJobs from './screens/MyJobs';
 import Earnings from './screens/Earnings';
 import VehicleInfo from './screens/VehicleInfo';
@@ -185,11 +184,6 @@ function App() {
           />
           
           {/* Contractor Screens */}
-          <Stack.Screen 
-            name="AvailableJobs" 
-            component={AvailableJobs} 
-            options={{ headerShown: false }} 
-          />
           <Stack.Screen 
             name="MyJobs" 
             component={MyJobs} 

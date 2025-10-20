@@ -295,7 +295,7 @@ const MyJobs = () => {
       </Text>
       <Text style={styles.emptyStateDescription}>
         {filter === 'active' 
-          ? 'Check the Available Jobs section to find new opportunities.'
+          ? 'Active jobs will appear here when assigned to you.'
           : filter === 'completed'
           ? 'Completed jobs will appear here after you finish them.'
           : 'Your accepted jobs will appear here.'}
