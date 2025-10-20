@@ -1,0 +1,95 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection - authenticated users can read/write their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Allow employees to read all user data for management purposes
+      allow read: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
+    }
+    
+    // Jobs collection - authenticated users can read/write based on their role
+    match /jobs/{jobId} {
+      // Customers can read/write their own jobs
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.customerId;
+      
+      // Contractors can read jobs assigned to them
+      allow read, update: if request.auth != null && 
+        request.auth.uid == resource.data.contractorId;
+      
+      // Employees can read/write all jobs
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
+      
+      // Allow contractors to read available jobs (where contractorId is null)
+      allow read: if request.auth != null && 
+        resource.data.contractorId == null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'contractor';
+    }
+    
+    // Ratings collection - users can read/write ratings they're involved in
+    match /ratings/{ratingId} {
+      // Users can read ratings they gave or received
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.raterId || 
+         request.auth.uid == resource.data.ratedUserId);
+      
+      // Users can write ratings they give
+      allow write: if request.auth != null && 
+        request.auth.uid == request.resource.data.raterId;
+      
+      // Employees can read all ratings
+      allow read: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
+    }
+    
+    // Disputes collection - employees can manage all disputes
+    match /disputes/{disputeId} {
+      // Customers and contractors involved in the dispute can read it
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.customerId || 
+         request.auth.uid == resource.data.contractorId);
+      
+      // Employees can read/write all disputes
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
+      
+      // Users can create disputes for their jobs
+      allow create: if request.auth != null && 
+        (request.auth.uid == request.resource.data.customerId || 
+         request.auth.uid == request.resource.data.contractorId);
+    }
+    
+    // Notifications collection - users can read their own notifications
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      
+      // Employees can read/write all notifications
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
+    }
+    
+    // App configuration - employees can read/write
+    match /appConfig/{configId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
+    }
+    
+    // Default deny rule for any other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
