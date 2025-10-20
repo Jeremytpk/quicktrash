@@ -266,11 +266,6 @@ const EmployeeDashboard = ({ navigation }) => {
         title="Admin Dashboard"
         subtitle="QuickTrash Operations"
         showBackButton={false}
-        rightComponent={
-          <TouchableOpacity style={styles.settingsButton}>
-            <Ionicons name="settings-outline" size={24} color="#333" />
-          </TouchableOpacity>
-        }
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
