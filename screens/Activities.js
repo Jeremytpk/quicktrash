@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
-import { db } from '../firebaseConfig';
+import { db, auth } from '../firebaseConfig';
 import { 
   collection, 
   query, 
@@ -21,8 +21,10 @@ import {
   limit,
   Timestamp 
 } from 'firebase/firestore';
+import { useUser } from '../contexts/UserContext';
 
 const Activities = ({ navigation }) => {
+  const { user, userRole } = useUser();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activities, setActivities] = useState([]);
@@ -42,12 +44,24 @@ const Activities = ({ navigation }) => {
   ];
 
   useEffect(() => {
-    fetchActivitiesData();
-  }, [selectedFilter]);
+    // Only fetch data if user is authenticated and has employee role
+    if (user && userRole === 'employee') {
+      fetchActivitiesData();
+    } else {
+      setLoading(false);
+    }
+  }, [selectedFilter, user, userRole]);
 
   const fetchActivitiesData = async () => {
     try {
       setLoading(true);
+      
+      // Check if user is authenticated
+      if (!auth.currentUser) {
+        console.log('No authenticated user');
+        setLoading(false);
+        return;
+      }
       
       // Fetch jobs data
       const jobsQuery = query(
@@ -55,7 +69,7 @@ const Activities = ({ navigation }) => {
         orderBy('createdAt', 'desc')
       );
       
-      // Fetch users (contractors)
+      // Fetch users (contractors) - use both role and legacy flags
       const contractorsQuery = query(
         collection(db, 'users'),
         where('role', '==', 'contractor')
@@ -68,9 +82,18 @@ const Activities = ({ navigation }) => {
       );
 
       const [jobsSnapshot, contractorsSnapshot, ratingsSnapshot] = await Promise.all([
-        getDocs(jobsQuery),
-        getDocs(contractorsQuery),
-        getDocs(ratingsQuery)
+        getDocs(jobsQuery).catch(err => {
+          console.error('Error fetching jobs:', err);
+          return { docs: [], size: 0 };
+        }),
+        getDocs(contractorsQuery).catch(err => {
+          console.error('Error fetching contractors:', err);
+          return { docs: [], size: 0 };
+        }),
+        getDocs(ratingsQuery).catch(err => {
+          console.error('Error fetching ratings:', err);
+          return { docs: [], size: 0 };
+        })
       ]);
 
       // Process activities data
@@ -263,6 +286,38 @@ const Activities = ({ navigation }) => {
       </Text>
     </TouchableOpacity>
   );
+
+  // Show access denied message if user is not an employee
+  if (user && userRole !== 'employee') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <SharedHeader title="Activities" showBackButton />
+        <View style={styles.accessDeniedContainer}>
+          <Ionicons name="lock-closed" size={64} color="#9CA3AF" />
+          <Text style={styles.accessDeniedTitle}>Access Restricted</Text>
+          <Text style={styles.accessDeniedText}>
+            This feature is only available to employees. Please contact your administrator if you believe this is an error.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show loading or not authenticated message
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <SharedHeader title="Activities" showBackButton />
+        <View style={styles.accessDeniedContainer}>
+          <Ionicons name="person-circle-outline" size={64} color="#9CA3AF" />
+          <Text style={styles.accessDeniedTitle}>Authentication Required</Text>
+          <Text style={styles.accessDeniedText}>
+            Please log in to access this feature.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -569,6 +624,25 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginTop: 4,
     textAlign: 'center',
+  },
+  accessDeniedContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  accessDeniedTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  accessDeniedText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
   },
 });
 
