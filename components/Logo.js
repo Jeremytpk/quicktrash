@@ -54,7 +54,7 @@ const Logo = ({
   const textSize = getTextSize();
 
   // Use the QuickTrash logo - responsive and platform-aware
-  const logoSource = require('../assets/logo/qt_logo_short.png');
+  const logoSource = require('../assets/logo/qtLogoTxt.png');
 
   return (
     <View style={[styles.container, { height: logoHeight }, style]}>
