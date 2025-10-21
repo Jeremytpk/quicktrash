@@ -321,9 +321,11 @@ const ContractorDashboard = ({ navigation, route }) => {
     rating: 0,
     loading: true,
   });
+  const [permissionErrorBanner, setPermissionErrorBanner] = useState(null);
   const [sessionStartTime, setSessionStartTime] = useState(null);
   const [currentSessionTime, setCurrentSessionTime] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const sessionTimerRef = useRef(null);
+  const contractorDocPermissionDeniedRef = useRef(false);
 
   // Session timer functions
   const startSessionTimer = () => {
@@ -357,19 +359,27 @@ const ContractorDashboard = ({ navigation, route }) => {
   };
 
   const formatTimeDisplay = (sessionTime, totalStoredHours = 0) => {
-    // Add stored hours to current session
-    const totalHours = sessionTime.hours + Math.floor(totalStoredHours);
-    const totalMinutes = sessionTime.minutes;
-    const totalSeconds = sessionTime.seconds;
+    // Combine stored fractional hours with current session time and format as Hh Mm Ss
+    try {
+      const storedSeconds = Math.floor((totalStoredHours || 0) * 3600);
+      const sessionSeconds = (sessionTime?.hours || 0) * 3600 + (sessionTime?.minutes || 0) * 60 + (sessionTime?.seconds || 0);
+      const totalSeconds = storedSeconds + sessionSeconds;
 
-    return `${totalHours}h ${totalMinutes}m ${totalSeconds}s`;
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      return `${hours}h ${minutes}m ${seconds}s`;
+    } catch (e) {
+      return `0h 0m 0s`;
+    }
   };
 
   // Fetch performance data from Firestore
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    const fetchPerformanceData = async () => {
+    const fetchPerformanceData = () => {
       try {
         // Query completed jobs for this contractor
         const completedJobsQuery = query(
@@ -384,14 +394,14 @@ const ContractorDashboard = ({ navigation, route }) => {
           let totalRatings = 0;
           let ratingsCount = 0;
 
-          snapshot.forEach((doc) => {
-            const job = doc.data();
+          snapshot.forEach((docSnap) => {
+            const job = docSnap.data();
             totalJobs++;
-            
+
             // Calculate earnings
             if (job.pricing?.contractorPayout) {
-              const payout = typeof job.pricing.contractorPayout === 'string' 
-                ? parseFloat(job.pricing.contractorPayout.replace('$', ''))
+              const payout = typeof job.pricing.contractorPayout === 'string'
+                ? parseFloat(String(job.pricing.contractorPayout).replace(/[^0-9.-]+/g, ''))
                 : job.pricing.contractorPayout;
               totalEarnings += payout || 0;
             }
@@ -406,51 +416,80 @@ const ContractorDashboard = ({ navigation, route }) => {
           // Calculate average rating
           const avgRating = ratingsCount > 0 ? (totalRatings / ratingsCount) : 0;
 
-          // Get contractor data for hours online calculation
+          // Fetch contractor data once to compute stored hours / online flag, but avoid repeating if permissions denied
           const contractorRef = doc(db, 'contractors', auth.currentUser.uid);
-          onSnapshot(contractorRef, (contractorDoc) => {
-            let hoursOnline = '0h 0m 0s';
-            let storedHours = 0;
-            
-            if (contractorDoc.exists()) {
-              const contractorData = contractorDoc.data();
-              storedHours = contractorData.totalHoursOnline || 0;
-              
-              // If contractor is online and we have session time, combine with stored hours
-              if (contractorData.isOnline && currentSessionTime) {
-                hoursOnline = formatTimeDisplay(currentSessionTime, storedHours);
-              } else if (storedHours > 0) {
-                // Show only stored hours when offline
-                const totalHours = Math.floor(storedHours);
-                const totalMinutes = Math.floor((storedHours % 1) * 60);
-                hoursOnline = `${totalHours}h ${totalMinutes}m 0s`;
-              }
-            }
-
+          if (contractorDocPermissionDeniedRef.current) {
+            // Permission previously denied; skip getDoc and show fallback
             setPerformanceStats({
               jobsCompleted: totalJobs,
-              earnings: `$${totalEarnings.toFixed(0)}`,
-              hoursOnline,
+              earnings: `$${Number(totalEarnings || 0).toFixed(2)}`,
+              hoursOnline: formatTimeDisplay({ hours: 0, minutes: 0, seconds: 0 }, 0),
               rating: parseFloat(avgRating.toFixed(1)),
               loading: false,
             });
-          });
+            // set a banner once to inform user / developer
+            if (!permissionErrorBanner) setPermissionErrorBanner('Insufficient permissions to read contractor profile. Some stats may be unavailable.');
+          } else {
+            getDoc(contractorRef).then((contractorDoc) => {
+              let hoursOnline = '0h 0m 0s';
+              let storedHours = 0;
+
+              if (contractorDoc.exists()) {
+                const contractorData = contractorDoc.data();
+                storedHours = contractorData.totalHoursOnline || 0;
+
+                // If contractor is online and we have session time, combine with stored hours
+                if (contractorData.isOnline && currentSessionTime) {
+                  hoursOnline = formatTimeDisplay(currentSessionTime, storedHours);
+                } else {
+                  // Show stored hours (including fractional part)
+                  hoursOnline = formatTimeDisplay({ hours: 0, minutes: 0, seconds: 0 }, storedHours);
+                }
+              }
+
+              setPerformanceStats({
+                jobsCompleted: totalJobs,
+                earnings: `$${Number(totalEarnings || 0).toFixed(2)}`,
+                hoursOnline,
+                rating: parseFloat(avgRating.toFixed(1)),
+                loading: false,
+              });
+            }).catch((err) => {
+              console.error('Error fetching contractor doc for performance:', err);
+              // If permission error, flip the ref so we don't keep retrying
+              if (err && err.code && err.code.toLowerCase().includes('permission')) {
+                contractorDocPermissionDeniedRef.current = true;
+                setPermissionErrorBanner('Insufficient permissions to read contractor profile. Some stats may be unavailable.');
+              }
+              setPerformanceStats({
+                jobsCompleted: totalJobs,
+                earnings: `$${Number(totalEarnings || 0).toFixed(2)}`,
+                hoursOnline: formatTimeDisplay({ hours: 0, minutes: 0, seconds: 0 }, 0),
+                rating: parseFloat(avgRating.toFixed(1)),
+                loading: false,
+              });
+            });
+          }
+        }, (err) => {
+          console.error('Error in completed jobs snapshot:', err);
+          setPerformanceStats(prev => ({ ...prev, loading: false }));
         });
 
         return unsubscribeCompleted;
       } catch (error) {
         console.error('Error fetching performance data:', error);
         setPerformanceStats(prev => ({ ...prev, loading: false }));
+        return null;
       }
     };
 
     const unsubscribe = fetchPerformanceData();
     return () => {
       if (unsubscribe && typeof unsubscribe === 'function') {
-        unsubscribe();
+        try { unsubscribe(); } catch (e) { /* ignore */ }
       }
     };
-  }, []);
+  }, [currentSessionTime]);
 
   // Cleanup timer on unmount
   useEffect(() => {
