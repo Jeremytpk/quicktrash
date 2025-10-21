@@ -12,10 +12,29 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
+import RateUserModal from '../components/RateUserModal';
 // import OrderBasket from '../components/OrderBasket'; // Removed OrderBasket
 import LocationService from '../services/LocationService';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { db, auth } from '../firebaseConfig';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  doc, 
+  addDoc, 
+  getDoc, 
+  getDocs,
+  updateDoc, 
+  setDoc, 
+  increment, 
+  serverTimestamp,
+  orderBy,
+  limit
+} from 'firebase/firestore';
+import { Alert } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -25,6 +44,9 @@ const CustomerDashboard = ({ navigation }) => {
   const [mapRegion, setMapRegion] = useState(null);
   const [locationError, setLocationError] = useState(null);
   const [isLocationTracking, setIsLocationTracking] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [jobToRate, setJobToRate] = useState(null);
+  const [ratedJobs, setRatedJobs] = useState(new Set());
 
   useEffect(() => {
     // Initialize location service for customers
@@ -95,6 +117,95 @@ const CustomerDashboard = ({ navigation }) => {
 
     initLocation();
   }, []);
+
+  // Listen for completed jobs that need rating
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const jobsQuery = query(
+      collection(db, 'jobs'),
+      where('customerId', '==', auth.currentUser.uid),
+      where('status', '==', 'completed'),
+      orderBy('completedAt', 'desc'),
+      limit(10)
+    );
+
+    const unsubscribe = onSnapshot(jobsQuery, async (snapshot) => {
+      for (const change of snapshot.docChanges()) {
+        if (change.type === 'added' || change.type === 'modified') {
+          const jobData = change.doc.data();
+          const jobId = change.doc.id;
+          
+          // Check if this job has been rated by the customer
+          if (!ratedJobs.has(jobId) && jobData.contractorId) {
+            const ratingsQuery = query(
+              collection(db, 'ratings'),
+              where('jobId', '==', jobId),
+              where('raterId', '==', auth.currentUser.uid)
+            );
+            
+            const ratingsSnapshot = await getDocs(ratingsQuery);
+            
+            if (ratingsSnapshot.empty) {
+              // Show rating modal
+              setJobToRate({ 
+                id: jobId, 
+                customerId: jobData.customerId, 
+                contractorId: jobData.contractorId 
+              });
+              setShowRatingModal(true);
+              setRatedJobs(prev => new Set([...prev, jobId]));
+              break; // Only show one rating modal at a time
+            }
+          }
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [ratedJobs]);
+
+  const handleSubmitRating = async ({ rating, review }) => {
+    try {
+      if (!jobToRate) return;
+      
+      const ratingData = {
+        jobId: jobToRate.id,
+        raterId: auth.currentUser.uid,
+        raterRole: 'customer',
+        ratedUserId: jobToRate.contractorId,
+        ratedUserRole: 'contractor',
+        rating: rating,
+        review: review || '',
+        createdAt: serverTimestamp(),
+      };
+      
+      // Save rating to Firestore
+      await addDoc(collection(db, 'ratings'), ratingData);
+      
+      // Update the rated user's aggregate rating
+      const userRef = doc(db, 'users', jobToRate.contractorId);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        await updateDoc(userRef, {
+          'ratings.sum': increment(rating),
+          'ratings.count': increment(1),
+        });
+      } else {
+        await setDoc(userRef, {
+          ratings: { sum: rating, count: 1 }
+        }, { merge: true });
+      }
+      
+      setShowRatingModal(false);
+      setJobToRate(null);
+      Alert.alert('Success', 'Thank you for your feedback!');
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      Alert.alert('Error', 'Failed to submit rating. Please try again.');
+    }
+  };
 
   const wasteTypes = [
     { id: 'household', name: 'Household Trash', icon: 'home', color: '#34A853' },
@@ -356,6 +467,17 @@ const CustomerDashboard = ({ navigation }) => {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+      
+      {/* Rating Modal */}
+      <RateUserModal
+        visible={showRatingModal}
+        onClose={() => {
+          setShowRatingModal(false);
+          setJobToRate(null);
+        }}
+        onSubmit={handleSubmitRating}
+        title="Rate Contractor"
+      />
     </View>
   );
 };

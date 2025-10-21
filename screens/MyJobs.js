@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons'; // Added MaterialIcons
 import SharedHeader from '../components/SharedHeader';
+import RateUserModal from '../components/RateUserModal';
 import * as Location from 'expo-location';
 import { useUser } from '../contexts/UserContext';
 import { db, auth } from '../firebaseConfig';
@@ -26,7 +27,11 @@ import {
   onSnapshot, 
   doc, 
   updateDoc,
-  serverTimestamp 
+  serverTimestamp,
+  addDoc,
+  getDoc,
+  setDoc,
+  increment
 } from 'firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 // NOTE: You will need to import your MapView component here (e.g., import MapView from 'react-native-maps')
@@ -78,6 +83,8 @@ const MyJobs = () => {
   const [showNavigationModal, setShowNavigationModal] = useState(false);
   const [navigationJob, setNavigationJob] = useState(null);
   const [jobLocationPin, setJobLocationPin] = useState(null);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [jobToRate, setJobToRate] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isWithinPickupRange, setIsWithinPickupRange] = useState(false);
   const [is3DEnabled, setIs3DEnabled] = useState(false);
@@ -229,13 +236,19 @@ const MyJobs = () => {
           onPress: async () => {
             try {
               const jobRef = doc(db, 'jobs', jobId);
+              const jobSnap = await getDoc(jobRef);
+              const jobData = jobSnap.data();
+              
               await updateDoc(jobRef, {
                 status: 'completed',
                 completedAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               });
               setSelectedJob(prev => prev ? {...prev, status: 'completed'} : null);
-              Alert.alert('Success', 'Job completed! Your payment is being processed.');
+              
+              // Prompt contractor to rate the customer
+              setJobToRate({ id: jobId, customerId: jobData.customerId, contractorId: jobData.contractorId });
+              setShowRatingModal(true);
             } catch (error) {
               console.error('Jey: Error completing job:', error);
               Alert.alert('Error', 'Failed to complete job. Please try again.');
@@ -244,6 +257,51 @@ const MyJobs = () => {
         }
       ]
     );
+  };
+
+  const handleSubmitRating = async ({ rating, review }) => {
+    try {
+      if (!jobToRate) return;
+      
+      const ratingData = {
+        jobId: jobToRate.id,
+        raterId: auth.currentUser.uid,
+        raterRole: 'contractor',
+        ratedUserId: jobToRate.customerId,
+        ratedUserRole: 'customer',
+        rating: rating,
+        review: review || '',
+        createdAt: serverTimestamp(),
+      };
+      
+      // Save rating to Firestore
+      await addDoc(collection(db, 'ratings'), ratingData);
+      
+      // Update the rated user's aggregate rating
+      const userRef = doc(db, 'users', jobToRate.customerId);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        const currentRatings = userData.ratings || { sum: 0, count: 0 };
+        
+        await updateDoc(userRef, {
+          'ratings.sum': increment(rating),
+          'ratings.count': increment(1),
+        });
+      } else {
+        await setDoc(userRef, {
+          ratings: { sum: rating, count: 1 }
+        }, { merge: true });
+      }
+      
+      setShowRatingModal(false);
+      setJobToRate(null);
+      Alert.alert('Success', 'Thank you for your feedback!');
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      Alert.alert('Error', 'Failed to submit rating. Please try again.');
+    }
   };
 
   // --- Navigation/Location Logic ---
@@ -761,6 +819,17 @@ const MyJobs = () => {
       
       {/* Navigation Modal */}
       {renderNavigationModal()}
+      
+      {/* Rating Modal */}
+      <RateUserModal
+        visible={showRatingModal}
+        onClose={() => {
+          setShowRatingModal(false);
+          setJobToRate(null);
+        }}
+        onSubmit={handleSubmitRating}
+        title="Rate Customer"
+      />
     </SafeAreaView>
   );
 };
