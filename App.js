@@ -51,6 +51,7 @@ import ContractorActivities from './screens/ContractorActivities';
 import ContractorDetails from './screens/ContractorDetails';
 import FinancialOperations from './screens/FinancialOperations';
 import TransactionDetails from './screens/TransactionDetails';
+import RatingsInsights from './screens/RatingsInsights';
 
 
 // Create the stack navigator
@@ -265,6 +266,11 @@ function App() {
               <Stack.Screen
                 name="TransactionDetails"
                 component={TransactionDetails}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="RatingsInsights"
+                component={RatingsInsights}
                 options={{ headerShown: false }}
               />
               <Stack.Screen

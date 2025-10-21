@@ -386,6 +386,15 @@ const Activities = ({ navigation }) => {
               <Text style={styles.quickActionText}>Financial Operations</Text>
               <Text style={styles.quickActionSubtext}>View money operations</Text>
             </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.quickActionCard}
+              onPress={() => navigation.navigate('RatingsInsights')}
+            >
+              <Ionicons name="star" size={32} color="#F59E0B" />
+              <Text style={styles.quickActionText}>Ratings Insights</Text>
+              <Text style={styles.quickActionSubtext}>View ratings & reviews</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -469,10 +478,11 @@ const styles = StyleSheet.create({
   },
   quickActionsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   quickActionCard: {
-    flex: 1,
+    width: '30%',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,

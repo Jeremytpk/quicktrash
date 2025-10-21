@@ -13,12 +13,14 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
-import { db } from '../firebaseConfig';
+import { db, auth } from '../firebaseConfig';
 import { collection, query, getDocs, where, Timestamp } from 'firebase/firestore';
+import { useUser } from '../contexts/UserContext';
 
 const { width } = Dimensions.get('window');
 
 const Analytics = ({ navigation }) => {
+  const { user, userRole } = useUser();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [analyticsData, setAnalyticsData] = useState({
@@ -26,6 +28,7 @@ const Analytics = ({ navigation }) => {
     totalRevenue: 0,
     avgJobPrice: 0,
     jobsByStatus: {},
+    topDrivers: [],
   });
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [showDriverModal, setShowDriverModal] = useState(false);
@@ -76,27 +79,48 @@ const Analytics = ({ navigation }) => {
   };
 
   useEffect(() => {
-    fetchAnalyticsData();
-  }, []);
+    // Only fetch data if user is authenticated and has employee role
+    if (user && userRole === 'employee') {
+      fetchAnalyticsData();
+    } else {
+      setLoading(false);
+    }
+  }, [user, userRole]);
 
   const fetchAnalyticsData = async () => {
     try {
       setLoading(true);
       
+      // Check if user is authenticated
+      if (!auth.currentUser) {
+        console.log('No authenticated user');
+        setLoading(false);
+        return;
+      }
+      
       // Fetch all jobs
       const jobsQuery = query(collection(db, 'jobs'));
-      const jobsSnapshot = await getDocs(jobsQuery);
+      const jobsSnapshot = await getDocs(jobsQuery).catch(err => {
+        console.error('Error fetching jobs:', err);
+        return { docs: [], size: 0 };
+      });
       
-      // Fetch all contractors
+      // Fetch all contractors - try both role and legacy flags
       const contractorsQuery = query(
         collection(db, 'users'),
         where('role', '==', 'contractor')
       );
-      const contractorsSnapshot = await getDocs(contractorsQuery);
+      const contractorsSnapshot = await getDocs(contractorsQuery).catch(err => {
+        console.error('Error fetching contractors:', err);
+        return { docs: [], size: 0 };
+      });
       
       // Fetch all ratings
       const ratingsQuery = query(collection(db, 'ratings'));
-      const ratingsSnapshot = await getDocs(ratingsQuery);
+      const ratingsSnapshot = await getDocs(ratingsQuery).catch(err => {
+        console.error('Error fetching ratings:', err);
+        return { docs: [], size: 0 };
+      });
       
       // Process jobs data
       let totalRevenue = 0;
@@ -122,24 +146,42 @@ const Analytics = ({ navigation }) => {
         }
       });
       
-      // Process contractors data
+      // Process contractors data with ratings integration
       const topDrivers = [];
+      const ratingsMap = new Map();
+      
+      // Create a map of ratings by contractor
+      ratingsSnapshot.forEach(doc => {
+        const rating = doc.data();
+        const contractorId = rating.ratedUserId;
+        if (!ratingsMap.has(contractorId)) {
+          ratingsMap.set(contractorId, []);
+        }
+        ratingsMap.get(contractorId).push(rating.rating || 0);
+      });
+      
       contractorsSnapshot.forEach(doc => {
         const contractor = doc.data();
         const performance = contractor.contractorData?.performance;
+        const contractorRatings = ratingsMap.get(doc.id) || [];
         
-        if (performance) {
-          topDrivers.push({
-            id: doc.id,
-            name: contractor.displayName || 'Unknown Driver',
-            rating: performance.rating || 0,
-            jobs: performance.totalJobs || 0,
-            status: contractor.contractorData.availability?.isOnline ? 'Online' : 'Offline',
-            earnings: `$${performance.totalEarnings || 0}`,
-            phone: contractor.phoneNumber || 'N/A',
-            email: contractor.email || 'N/A'
-          });
-        }
+        // Calculate average rating from actual ratings data
+        const avgRating = contractorRatings.length > 0 
+          ? contractorRatings.reduce((sum, rating) => sum + rating, 0) / contractorRatings.length
+          : (performance?.rating || 0);
+        
+        topDrivers.push({
+          id: doc.id,
+          name: contractor.displayName || 'Unknown Driver',
+          rating: avgRating,
+          jobs: performance?.totalJobs || 0,
+          status: contractor.contractorData?.availability?.isOnline ? 'Online' : 'Offline',
+          earnings: `$${performance?.totalEarnings || 0}`,
+          phone: contractor.phoneNumber || 'N/A',
+          email: contractor.email || 'N/A',
+          totalRatings: contractorRatings.length,
+          recentRatings: contractorRatings.slice(-5) // Last 5 ratings
+        });
       });
       
       // Sort by jobs completed (descending)
@@ -195,6 +237,38 @@ const Analytics = ({ navigation }) => {
       default: return '#9CA3AF';
     }
   };
+
+  // Show access denied message if user is not an employee
+  if (user && userRole !== 'employee') {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <SharedHeader title="Business Analytics" showBackButton />
+        <View style={styles.accessDeniedContainer}>
+          <Ionicons name="lock-closed" size={64} color="#9CA3AF" />
+          <Text style={styles.accessDeniedTitle}>Access Restricted</Text>
+          <Text style={styles.accessDeniedText}>
+            This feature is only available to employees. Please contact your administrator if you believe this is an error.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show loading or not authenticated message
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <SharedHeader title="Business Analytics" showBackButton />
+        <View style={styles.accessDeniedContainer}>
+          <Ionicons name="person-circle-outline" size={64} color="#9CA3AF" />
+          <Text style={styles.accessDeniedTitle}>Authentication Required</Text>
+          <Text style={styles.accessDeniedText}>
+            Please log in to access this feature.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -267,7 +341,7 @@ const Analytics = ({ navigation }) => {
             {/* Top Drivers Section */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Top Drivers</Text>
-              {mockData.topDrivers.map((driver) => (
+              {(analyticsData.topDrivers || []).map((driver) => (
                 <TouchableOpacity
                   key={driver.id}
                   style={styles.driverCard}
@@ -580,6 +654,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  accessDeniedContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  accessDeniedTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  accessDeniedText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
   },
 });
 
