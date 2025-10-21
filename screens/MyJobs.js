@@ -9,11 +9,11 @@ import {
   Alert,
   Modal,
   ScrollView,
-  SafeAreaView,
   Platform,
   Linking,
   ActivityIndicator, // Added ActivityIndicator for better loading UX
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons'; // Added MaterialIcons
 import SharedHeader from '../components/SharedHeader';
 import * as Location from 'expo-location';

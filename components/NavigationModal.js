@@ -1,12 +1,12 @@
 import React from 'react';
 import {
   Modal,
-  SafeAreaView,
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Circle } from '../components/WebCompatibleMap';
 import { Ionicons } from '@expo/vector-icons';
 

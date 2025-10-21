@@ -8,11 +8,11 @@ import {
   Platform,
   ActivityIndicator, 
   Modal,
-  SafeAreaView,
   Animated,
   Easing,
   ScrollView, // Added for the new dumpster list
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location'; 
