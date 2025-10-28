@@ -118,6 +118,39 @@ const ContractorDashboard = ({ navigation, route }) => {
       setLocationError(null);
       console.log('Location tracking started');
 
+      // If the contractor is currently marked online, ensure the session timer is running
+      // Resume from lastLoginTime if available in Firestore, otherwise start fresh
+      if (isOnline) {
+        try {
+          const contractorRef = doc(db, 'contractors', auth.currentUser?.uid || '');
+          if (auth.currentUser) {
+            const snap = await getDoc(contractorRef).catch(() => null);
+            if (snap && snap.exists()) {
+              const data = snap.data();
+              const lastLogin = data.lastLoginTime;
+              const stored = data.totalHoursOnline || 0;
+              setContractorStoredHours(stored);
+              setContractorIsOnline(true);
+              if (lastLogin && lastLogin.toDate) {
+                // Resume timer from stored lastLoginTime
+                startSessionTimerFrom(lastLogin.toDate());
+              } else {
+                // Start timer now if not already running
+                if (!sessionTimerRef.current) startSessionTimer();
+              }
+            } else {
+              // No doc found - start local timer
+              setContractorStoredHours(0);
+              setContractorIsOnline(true);
+              if (!sessionTimerRef.current) startSessionTimer();
+            }
+          }
+        } catch (err) {
+          console.warn('Could not resume timer from Firestore on location start:', err);
+          if (!sessionTimerRef.current) startSessionTimer();
+        }
+      }
+
     } catch (error) {
       console.error('Error starting location tracking:', error);
       setLocationError('Failed to start location tracking');
@@ -326,20 +359,29 @@ const ContractorDashboard = ({ navigation, route }) => {
   const [currentSessionTime, setCurrentSessionTime] = useState({ hours: 0, minutes: 0, seconds: 0 });
   const sessionTimerRef = useRef(null);
   const contractorDocPermissionDeniedRef = useRef(false);
+  const [contractorStoredHours, setContractorStoredHours] = useState(0);
+  const [contractorIsOnline, setContractorIsOnline] = useState(false);
 
   // Session timer functions
   const startSessionTimer = () => {
     if (sessionTimerRef.current) {
       clearInterval(sessionTimerRef.current);
     }
-
+    // Default to now
     const startTime = new Date();
     setSessionStartTime(startTime);
+
+    // Immediately set current session time so UI updates without waiting 1s
+    setCurrentSessionTime({ hours: 0, minutes: 0, seconds: 0 });
+    setPerformanceStats(prev => ({
+      ...prev,
+      hoursOnline: formatTimeDisplay({ hours: 0, minutes: 0, seconds: 0 }, contractorStoredHours)
+    }));
 
     sessionTimerRef.current = setInterval(() => {
       const now = new Date();
       const diffMs = now - startTime;
-      
+
       const totalSeconds = Math.floor(diffMs / 1000);
       const hours = Math.floor(totalSeconds / 3600);
       const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -347,6 +389,39 @@ const ContractorDashboard = ({ navigation, route }) => {
 
       setCurrentSessionTime({ hours, minutes, seconds });
     }, 1000); // Update every second for real-time display
+  };
+
+  // New helper: start session timer with a provided start Date (useful to resume an existing session)
+  const startSessionTimerFrom = (startDate) => {
+    if (sessionTimerRef.current) {
+      clearInterval(sessionTimerRef.current);
+    }
+    const startTime = startDate instanceof Date ? startDate : new Date();
+    setSessionStartTime(startTime);
+
+    // Compute and set initial session time immediately
+    const now = new Date();
+    const diffMs = now - startTime;
+    const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    setCurrentSessionTime({ hours, minutes, seconds });
+    setPerformanceStats(prev => ({
+      ...prev,
+      hoursOnline: formatTimeDisplay({ hours, minutes, seconds }, contractorStoredHours)
+    }));
+
+    sessionTimerRef.current = setInterval(() => {
+      const nowTick = new Date();
+      const diffMsTick = nowTick - startTime;
+      const totalSecondsTick = Math.max(0, Math.floor(diffMsTick / 1000));
+      const hoursTick = Math.floor(totalSecondsTick / 3600);
+      const minutesTick = Math.floor((totalSecondsTick % 3600) / 60);
+      const secondsTick = totalSecondsTick % 60;
+
+      setCurrentSessionTime({ hours: hoursTick, minutes: minutesTick, seconds: secondsTick });
+    }, 1000);
   };
 
   const stopSessionTimer = () => {
@@ -420,6 +495,8 @@ const ContractorDashboard = ({ navigation, route }) => {
           const contractorRef = doc(db, 'contractors', auth.currentUser.uid);
           if (contractorDocPermissionDeniedRef.current) {
             // Permission previously denied; skip getDoc and show fallback
+            setContractorStoredHours(0);
+            setContractorIsOnline(false);
             setPerformanceStats({
               jobsCompleted: totalJobs,
               earnings: `$${Number(totalEarnings || 0).toFixed(2)}`,
@@ -437,6 +514,9 @@ const ContractorDashboard = ({ navigation, route }) => {
               if (contractorDoc.exists()) {
                 const contractorData = contractorDoc.data();
                 storedHours = contractorData.totalHoursOnline || 0;
+                // persist stored values in state so session timer can use them
+                setContractorStoredHours(storedHours);
+                setContractorIsOnline(!!contractorData.isOnline);
 
                 // If contractor is online and we have session time, combine with stored hours
                 if (contractorData.isOnline && currentSessionTime) {
@@ -445,6 +525,9 @@ const ContractorDashboard = ({ navigation, route }) => {
                   // Show stored hours (including fractional part)
                   hoursOnline = formatTimeDisplay({ hours: 0, minutes: 0, seconds: 0 }, storedHours);
                 }
+              } else {
+                setContractorStoredHours(0);
+                setContractorIsOnline(false);
               }
 
               setPerformanceStats({
@@ -461,6 +544,8 @@ const ContractorDashboard = ({ navigation, route }) => {
                 contractorDocPermissionDeniedRef.current = true;
                 setPermissionErrorBanner('Insufficient permissions to read contractor profile. Some stats may be unavailable.');
               }
+              setContractorStoredHours(0);
+              setContractorIsOnline(false);
               setPerformanceStats({
                 jobsCompleted: totalJobs,
                 earnings: `$${Number(totalEarnings || 0).toFixed(2)}`,
@@ -500,16 +585,22 @@ const ContractorDashboard = ({ navigation, route }) => {
     };
   }, []);
 
-  // Update performance stats when session time changes
+  // Update performance stats when session time, stored hours, or online flag changes
   useEffect(() => {
-    if (sessionStartTime && currentSessionTime) {
-      // Trigger a re-render of performance stats with updated time
+    if (!currentSessionTime) return;
+
+    if (contractorIsOnline) {
       setPerformanceStats(prev => ({
         ...prev,
-        hoursOnline: formatTimeDisplay(currentSessionTime, 0) // Will be updated by Firestore listener
+        hoursOnline: formatTimeDisplay(currentSessionTime, contractorStoredHours)
+      }));
+    } else {
+      setPerformanceStats(prev => ({
+        ...prev,
+        hoursOnline: formatTimeDisplay({ hours: 0, minutes: 0, seconds: 0 }, contractorStoredHours)
       }));
     }
-  }, [currentSessionTime]);
+  }, [currentSessionTime, contractorIsOnline, contractorStoredHours]);
 
   const handleToggleOnline = async () => {
     const newOnlineStatus = !isOnline;
@@ -518,24 +609,66 @@ const ContractorDashboard = ({ navigation, route }) => {
     if (newOnlineStatus) {
       // Going online - start location tracking, record login time, and start session timer
       await startLocationTracking();
-      startSessionTimer();
       
       if (auth.currentUser) {
         try {
           const contractorRef = doc(db, 'contractors', auth.currentUser.uid);
+          // Mark online on server with lastLoginTime
           await updateDoc(contractorRef, {
             isOnline: true,
             lastLoginTime: new Date(),
             lastUpdated: new Date(),
           });
+
+          // Read contractor doc to obtain stored hours (if allowed)
+          try {
+            const snap = await getDoc(contractorRef);
+            if (snap.exists()) {
+              const data = snap.data();
+              const stored = data.totalHoursOnline || 0;
+              setContractorStoredHours(stored);
+              setContractorIsOnline(true);
+
+              // If there is a lastLoginTime in the doc and it's a timestamp in the past, resume timer from there
+              const lastLogin = data.lastLoginTime;
+              if (lastLogin && lastLogin.toDate) {
+                // Use stored lastLoginTime to resume
+                startSessionTimerFrom(lastLogin.toDate());
+              } else {
+                // Start a fresh session timer from now
+                startSessionTimer();
+              }
+            } else {
+              // No doc, start fresh timer
+              setContractorStoredHours(0);
+              setContractorIsOnline(true);
+              startSessionTimer();
+            }
+          } catch (err) {
+            console.error('Error reading contractor doc after going online:', err);
+            // If permission denied, still start the timer so the user sees live time locally
+            contractorDocPermissionDeniedRef.current = contractorDocPermissionDeniedRef.current || (err && err.code && err.code.toLowerCase().includes('permission'));
+            setContractorStoredHours(0);
+            setContractorIsOnline(true);
+            startSessionTimer();
+          }
         } catch (error) {
           console.error('Error updating online status:', error);
+          // Start local timer even if update fails to give immediate feedback
+          setContractorIsOnline(true);
+          startSessionTimer();
         }
+      } else {
+        // No auth user; start timer locally
+        setContractorIsOnline(true);
+        startSessionTimer();
       }
       
       Alert.alert('Going Online', 'You are now available to receive job offers! Location tracking is active.');
     } else {
       // Going offline - stop location tracking, session timer, and calculate session hours
+      // Capture the last live session time before stopping the timer
+      const lastSessionTime = { ...currentSessionTime };
       stopLocationTracking();
       stopSessionTimer();
       
@@ -543,25 +676,40 @@ const ContractorDashboard = ({ navigation, route }) => {
         try {
           const contractorRef = doc(db, 'contractors', auth.currentUser.uid);
           const contractorSnap = await getDoc(contractorRef);
-          
+
           const updateData = {
             isOnline: false,
             lastUpdated: new Date(),
           };
 
+          // Compute session hours from the last in-memory timer snapshot (preferred)
+          const sessionHoursFromTimer = (lastSessionTime?.hours || 0) + ((lastSessionTime?.minutes || 0) / 60) + ((lastSessionTime?.seconds || 0) / 3600);
+
           if (contractorSnap.exists()) {
             const data = contractorSnap.data();
-            if (data.lastLoginTime) {
-              const sessionStart = data.lastLoginTime.toDate();
-              const sessionEnd = new Date();
-              const sessionHours = (sessionEnd - sessionStart) / (1000 * 60 * 60);
-              
-              const currentTotal = data.totalHoursOnline || 0;
-              updateData.totalHoursOnline = currentTotal + sessionHours;
-            }
+            const currentTotal = data.totalHoursOnline || 0;
+            const newStored = currentTotal + sessionHoursFromTimer;
+            updateData.totalHoursOnline = newStored;
+            // Update local stored hours so UI reflects newly added time
+            setContractorStoredHours(newStored);
+            // Also update the visible performance stat so it doesn't remain the last live time
+            setPerformanceStats(prev => ({
+              ...prev,
+              hoursOnline: formatTimeDisplay({ hours: 0, minutes: 0, seconds: 0 }, newStored),
+            }));
+          } else {
+            // No existing doc - use timer value as stored hours
+            const newStored = sessionHoursFromTimer;
+            updateData.totalHoursOnline = newStored;
+            setContractorStoredHours(newStored);
+            setPerformanceStats(prev => ({
+              ...prev,
+              hoursOnline: formatTimeDisplay({ hours: 0, minutes: 0, seconds: 0 }, newStored),
+            }));
           }
 
           await updateDoc(contractorRef, updateData);
+          setContractorIsOnline(false);
         } catch (error) {
           console.error('Error updating online status:', error);
         }
@@ -1128,9 +1276,11 @@ const ContractorDashboard = ({ navigation, route }) => {
             <View style={styles.statCard}>
               <Ionicons name="time" size={24} color="#1E88E5" />
               <Text style={styles.statNumber}>
-                {performanceStats.loading ? '...' : performanceStats.hoursOnline}
+                {performanceStats.loading ? '...' : (sessionTimerRef.current)
+                  ? formatTimeDisplay(currentSessionTime, contractorStoredHours)
+                  : performanceStats.hoursOnline}
               </Text>
-              <Text style={styles.statLabel}>Hours Online</Text>
+              <Text style={styles.statLabel}>Total Hours Online</Text>
             </View>
             <View style={styles.statCard}>
               <Ionicons name="star" size={24} color="#FFB300" />
@@ -1140,6 +1290,18 @@ const ContractorDashboard = ({ navigation, route }) => {
               <Text style={styles.statLabel}>Ratings</Text>
             </View>
           </View>
+          {/* Dev debug panel to inspect timer state */}
+          {__DEV__ && (
+            <View style={styles.debugPanel}>
+              <Text style={styles.debugTitle}>Debug: Timer State</Text>
+              <Text style={styles.debugLine}>sessionTimerRunning: {sessionTimerRef.current ? 'yes' : 'no'}</Text>
+              <Text style={styles.debugLine}>contractorIsOnline: {contractorIsOnline ? 'yes' : 'no'}</Text>
+              <Text style={styles.debugLine}>isLocationTracking: {isLocationTracking ? 'yes' : 'no'}</Text>
+              <Text style={styles.debugLine}>currentSessionTime: {`${currentSessionTime.hours || 0}h ${currentSessionTime.minutes || 0}m ${currentSessionTime.seconds || 0}s`}</Text>
+              <Text style={styles.debugLine}>contractorStoredHours: {contractorStoredHours}</Text>
+              <Text style={styles.debugLine}>performance.hoursOnline: {performanceStats.hoursOnline}</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -1934,6 +2096,9 @@ const styles = StyleSheet.create({
       fontWeight: 'bold',
       marginLeft: 6,
     },
+    debugPanel: { backgroundColor: '#111827', padding: 12, borderRadius: 8, marginTop: 12 },
+    debugTitle: { color: '#F3F4F6', fontWeight: '700', marginBottom: 8 },
+    debugLine: { color: '#E5E7EB', fontSize: 12, marginBottom: 4, fontFamily: 'monospace' },
     adjustLocationButton: {
       flex: 1,
       backgroundColor: '#F0F9FF',

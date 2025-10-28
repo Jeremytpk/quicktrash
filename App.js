@@ -27,6 +27,7 @@ import ErrorScreen from './screens/ErrorScreen';
 import LocationDebugScreen from './components/LocationDebugScreen';
 import LocationTestSimple from './components/LocationTestSimple';
 import LocationVerification from './components/LocationVerification';
+import WithdrawModal from './screens/WithdrawModal';
 
 // Customer screens
 import PaymentMethods from './screens/PaymentMethods';
@@ -36,6 +37,7 @@ import MyJobs from './screens/MyJobs';
 import Earnings from './screens/Earnings';
 import VehicleInfo from './screens/VehicleInfo';
 import SafetyToolkit from './screens/SafetyToolkit';
+import WithdrawToDebit from './screens/WithdrawToDebit';
 
 // Employee screens
 import UserManagement from './screens/UserManagement';
@@ -202,6 +204,11 @@ function App() {
             options={{ headerShown: false }} 
           />
           <Stack.Screen 
+            name="WithdrawToDebit"
+            component={WithdrawToDebit}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen 
             name="VehicleInfo" 
             component={VehicleInfo} 
             options={{ headerShown: false }} 
@@ -278,6 +285,11 @@ function App() {
                 component={MyRatings}
                 options={{ headerShown: false }}
               />
+          <Stack.Screen 
+            name="WithdrawModal"
+            component={WithdrawModal}
+            options={{ presentation: 'modal', headerShown: false }} 
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </UserProvider>

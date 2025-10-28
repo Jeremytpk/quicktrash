@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   Modal,
   ScrollView,
+<<<<<<< HEAD
   Platform,
   Linking,
   ActivityIndicator, // Added ActivityIndicator for better loading UX
@@ -18,6 +19,11 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons'; // Added MaterialI
 import SharedHeader from '../components/SharedHeader';
 import RateUserModal from '../components/RateUserModal';
 import * as Location from 'expo-location';
+=======
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import SharedHeader from '../components/SharedHeader';
+>>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
 import { useUser } from '../contexts/UserContext';
 import { db, auth } from '../firebaseConfig';
 import { 
@@ -29,57 +35,59 @@ import {
   updateDoc,
   serverTimestamp,
   addDoc,
+<<<<<<< HEAD
   getDoc,
   setDoc,
   increment
+=======
+  increment,
+  limit
+>>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
 } from 'firebase/firestore';
-import { useNavigation } from '@react-navigation/native';
-// NOTE: You will need to import your MapView component here (e.g., import MapView from 'react-native-maps')
-// import MapView, { Marker } from 'react-native-maps'; 
+import RateUserModal from '../components/RateUserModal';
 
-const Colors = {
-  primary: '#34A853', // Google Green (Used for success/main actions)
-  secondary: '#2563EB', // Blue (Used for navigation/action buttons)
-  warning: '#F59E0B', // Yellow/Orange (Used for in_progress)
-  danger: '#DC2626', // Red (For potential errors/cautions)
-  textDark: '#1F2937',
-  textMedium: '#4B5563',
-  textLight: '#6B7280',
-  background: '#F9FAFB',
-  cardBackground: '#FFFFFF',
-  border: '#E5E7EB',
+// Utility functions (kept local for simplicity)
+const getStatusColor = (status) => {
+    switch (status) {
+      case 'scheduled': return '#3B82F6';
+      case 'in_progress': return '#F59E0B';
+      case 'completed': return '#34A853';
+      default: return '#6B7280';
+    }
+  };
+
+const getStatusText = (status) => {
+  switch (status) {
+    case 'scheduled': return 'Scheduled';
+    case 'in_progress': return 'In Progress';
+    case 'completed': return 'Completed';
+    default: return status;
+  }
 };
 
-// Placeholder for map components - Replace with your actual imports
-const MapView = (props) => <View style={{ flex: 1, backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: Colors.textMedium }}>[Map Component Placeholder]</Text></View>;
-const Marker = (props) => null;
-
-
-// Utility function for Haversine distance calculation
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 3959; // Earth's radius in miles
-  const deg2rad = (deg) => deg * (Math.PI / 180);
-  const dLat = deg2rad(lat2 - lat1);
-  const dLon = deg2rad(lon2 - lon1);
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c; // Distance in miles
+const formatTime = (date) => {
+  // Check if date is a Firestore Timestamp object and convert it, otherwise assume Date object
+  const d = date?.toDate ? date.toDate() : (date instanceof Date ? date : null);
+  if (!d) return '';
   
-  return distance; 
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 };
 
 
-const MyJobs = () => {
-  const navigation = useNavigation();
+const MyJobs = ({ navigation }) => { // Added navigation to props if needed for real use
   const { user } = useUser();
   const [jobs, setJobs] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [showJobDetails, setShowJobDetails] = useState(false);
   const [filter, setFilter] = useState('active'); // active, completed, all
+<<<<<<< HEAD
   const [showNavigationModal, setShowNavigationModal] = useState(false);
   const [navigationJob, setNavigationJob] = useState(null);
   const [jobLocationPin, setJobLocationPin] = useState(null);
@@ -88,122 +96,119 @@ const MyJobs = () => {
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isWithinPickupRange, setIsWithinPickupRange] = useState(false);
   const [is3DEnabled, setIs3DEnabled] = useState(false);
+=======
+  const [showRateModal, setShowRateModal] = useState(false);
+  const [rateContext, setRateContext] = useState(null); // { jobId, customerId, customerName }
+>>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
   
-  const mapRef = useRef(null);
-  const DISTANCE_THRESHOLD_FEET = 100; // Define range constant
+  // NOTE: Mock job IDs are gone; now using dynamic Firestore data
 
-  // --- Data Fetching and Real-time Listener ---
+  // --- FIREBASE REAL-TIME DATA FETCH ---
   useEffect(() => {
     if (!auth.currentUser) {
-      setIsLoading(false);
+      setLoading(false);
+      // Optionally navigate to login or show error
+      console.error("Jey: No authenticated user found for MyJobs.");
       return;
     }
+    
+    setLoading(true);
 
     const contractorId = auth.currentUser.uid;
-    
-    // Query: Jobs assigned to current contractor
-    const jobsQuery = query(
-      collection(db, 'jobs'),
-      where('contractorId', '==', contractorId)
+    const jobsRef = collection(db, 'jobs');
+    let statusFilter = [];
+    let queryOrder = [];
+
+    // 1. Determine Status Filters
+    if (filter === 'active') {
+      // Active now means jobs that have been accepted and are awaiting pickup/completion
+      statusFilter = ['accepted'];
+      queryOrder = ['acceptedAt', 'desc']; // Order active (accepted) jobs newest-first
+    } else if (filter === 'completed') {
+      statusFilter = ['completed'];
+      queryOrder = ['completedAt', 'desc']; // Order completed jobs newest first
+    } else {
+        // 'all' filter is generally discouraged without status index, 
+        // but for a small user set, we will use it.
+        statusFilter = ['scheduled', 'in_progress', 'accepted', 'completed'];
+        queryOrder = ['createdAt', 'desc'];
+    }
+
+    // 2. Build the Query
+    // Firestore requires composite indexes when combining multiple where/orderBy clauses.
+    // To avoid forcing index creation for development, query only by contractorId (single-field)
+    // and apply status filtering + sorting client-side. Limit results to avoid large scans.
+    const jobQuery = query(
+      jobsRef,
+      where('contractorId', '==', contractorId),
+      limit(200)
     );
-
-    const unsubscribe = onSnapshot(jobsQuery, (snapshot) => {
-      const fetchedJobs = snapshot.docs.map((doc) => {
-        const jobData = { id: doc.id, ...doc.data() };
-        // Convert Firestore timestamps to Date objects if they exist
-        ['scheduledTime', 'acceptedAt', 'completedAt', 'createdAt'].forEach(key => {
-          if (jobData[key]?.toDate) {
-            jobData[key] = jobData[key].toDate();
-          }
+    
+    // 3. Set up the Real-time Listener
+    const unsubscribe = onSnapshot(jobQuery, (querySnapshot) => {
+      const liveJobs = [];
+      querySnapshot.forEach((doc) => {
+        const jobData = doc.data();
+        liveJobs.push({
+          id: doc.id,
+          ...jobData,
+          location: jobData.pickupAddress || jobData.location || { address: 'Address Missing' },
+          contractorEarnings: jobData.pricing?.contractorPayout || 0,
         });
-        return jobData;
       });
 
-      // Apply filter
-      const filteredJobs = fetchedJobs.filter(job => {
-        switch (filter) {
-          case 'active':
-            return ['accepted', 'scheduled', 'in_progress'].includes(job.status);
-          case 'completed':
-            return job.status === 'completed';
-          default:
-            return true;
-        }
-      });
+      // Apply status filter and sort locally to avoid composite index requirements
+      const filtered = liveJobs.filter(j => statusFilter.includes(j.status));
 
-      // Sort jobs by most recent scheduled/creation time first
-      filteredJobs.sort((a, b) => {
-        const aTime = a.scheduledTime || a.acceptedAt || a.createdAt || new Date(0);
-        const bTime = b.scheduledTime || b.acceptedAt || b.createdAt || new Date(0);
-        return bTime.getTime() - aTime.getTime();
-      });
+      // Sorting helper: handle Firestore Timestamps and JS Dates
+      const sortField = queryOrder[0];
+      const sortDir = (queryOrder[1] || 'desc').toLowerCase();
+      const getTime = (val) => {
+        if (!val) return 0;
+        if (val.toDate) return val.toDate().getTime();
+        const d = val instanceof Date ? val : new Date(val);
+        return isNaN(d.getTime()) ? 0 : d.getTime();
+      };
 
-      setJobs(filteredJobs);
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (sortField) {
+        filtered.sort((a, b) => {
+          const aVal = getTime(a[sortField]);
+          const bVal = getTime(b[sortField]);
+          return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+        });
+      }
+
+      setJobs(filtered);
+      setLoading(false);
+      setRefreshing(false);
     }, (error) => {
-      console.error('Jey: Error fetching contractor jobs:', error);
-      setIsLoading(false);
-      setIsRefreshing(false);
-      Alert.alert('Error', 'Failed to load your jobs. Please try again.');
+      console.error("Jey: Error fetching real-time jobs:", error);
+      setLoading(false);
+      setRefreshing(false);
+      Alert.alert("Data Error", "Failed to load jobs in real-time. Check connection.");
     });
 
+    // Clean up the listener on unmount or filter change
     return () => unsubscribe();
-  }, [filter]); // Re-run effect only when filter changes
-
-  // --- Utility Functions ---
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'scheduled': return Colors.secondary;
-      case 'in_progress': return Colors.warning;
-      case 'completed': return Colors.primary;
-      default: return Colors.textLight;
-    }
-  };
-
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'scheduled': return 'Scheduled';
-      case 'in_progress': return 'In Progress';
-      case 'completed': return 'Completed';
-      case 'accepted': return 'Accepted';
-      default: return status?.replace(/_/g, ' ') || 'Unknown';
-    }
-  };
-
-  const formatTime = (date) => {
-    if (!date) return 'N/A';
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatAddress = (job) => {
-    if (!job) return 'Address not specified';
-    return job.pickupAddress?.fullAddress || 
-           job.location?.address || 
-           job.pickupAddress?.street || 
-           'Address not specified';
-  };
+  }, [filter, user?.uid]); // Re-run effect when filter changes or user changes
 
   const onRefresh = () => {
-    setIsRefreshing(true);
-    // Setting isRefreshing will cause the Firestore listener in useEffect to trigger a re-render
+    setRefreshing(true);
+    // The useEffect listener handles refresh automatically, but we can 
+    // force a re-render/re-fetch by briefly toggling the filter state if needed.
+    // For now, let the listener handle refresh.
   };
-
-  // --- Action Handlers ---
+  
+  // --- Job Action Handlers ---
 
   const handleStartJob = async (jobId) => {
     Alert.alert(
       'Start Job',
-      'Are you ready to officially start this job?',
+      'Are you ready to start this pickup?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Confirm Start',
+          text: 'Start',
           onPress: async () => {
             try {
               const jobRef = doc(db, 'jobs', jobId);
@@ -212,11 +217,12 @@ const MyJobs = () => {
                 startedAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               });
-              setSelectedJob(prev => prev ? {...prev, status: 'in_progress'} : null);
-              Alert.alert('Success', 'Job status updated to In Progress.');
+              // The onSnapshot listener will update the local state automatically
+              Alert.alert('Success', 'Job started! Navigate to the pickup location.');
+              setShowJobDetails(false);
             } catch (error) {
               console.error('Jey: Error starting job:', error);
-              Alert.alert('Error', 'Failed to update job status. Please try again.');
+              Alert.alert('Error', 'Failed to start job. Please try again.');
             }
           }
         }
@@ -227,12 +233,11 @@ const MyJobs = () => {
   const handleCompleteJob = async (jobId) => {
     Alert.alert(
       'Complete Job',
-      'Final confirmation: Is the job successfully completed?',
+      'Have you successfully completed the pickup?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Confirm Completion',
-          style: 'destructive',
+          text: 'Complete',
           onPress: async () => {
             try {
               const jobRef = doc(db, 'jobs', jobId);
@@ -244,11 +249,28 @@ const MyJobs = () => {
                 completedAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               });
+<<<<<<< HEAD
               setSelectedJob(prev => prev ? {...prev, status: 'completed'} : null);
               
               // Prompt contractor to rate the customer
               setJobToRate({ id: jobId, customerId: jobData.customerId, contractorId: jobData.contractorId });
               setShowRatingModal(true);
+=======
+              
+              // Find the job locally to get rating context before the list refreshes
+              const jobToRate = jobs.find(j => j.id === jobId);
+              if (jobToRate) {
+                  setRateContext({
+                      jobId: jobToRate.id,
+                      customerId: jobToRate.customerId,
+                      customerName: jobToRate.customerName
+                  });
+                  setShowRateModal(true);
+              }
+
+              Alert.alert('Success', 'Job completed! Your payment is being processed.');
+              setShowJobDetails(false);
+>>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
             } catch (error) {
               console.error('Jey: Error completing job:', error);
               Alert.alert('Error', 'Failed to complete job. Please try again.');
@@ -259,6 +281,7 @@ const MyJobs = () => {
     );
   };
 
+<<<<<<< HEAD
   const handleSubmitRating = async ({ rating, review }) => {
     try {
       if (!jobToRate) return;
@@ -427,117 +450,157 @@ const MyJobs = () => {
     setIsWithinPickupRange(false);
     setIs3DEnabled(false);
   };
+=======
+  // --- Placeholder Logic (removed dependencies on mocked fields) ---
+  const navigateToLocation = (job) => { Alert.alert('Navigate', `Directions to ${job.location?.address || 'Pickup Location'}`); };
+  const openExternalNavigation = () => { Alert.alert('External Nav', 'Launching external map app...'); };
+>>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
   
-  // Placeholder for map drag end handler (needs proper map implementation)
-  const handlePinDragEnd = (e) => {
-    const newCoords = e.nativeEvent.coordinate;
-    setJobLocationPin(newCoords);
-    checkPickupRange(newCoords);
-    Alert.alert('Location Pinned', 'New pickup location pinned. Confirm if this is correct.');
-  };
-
-  // Placeholder for 3D toggle (needs proper map implementation)
-  const toggle3DView = () => {
-    // This logic relies on having a real MapView component imported and assigned to mapRef
-    const new3DState = !is3DEnabled;
-    setIs3DEnabled(new3DState);
-    Alert.alert('Feature Note', `3D view toggled to ${new3DState}. Requires full map component integration.`);
+  // --- Render Job Card (minor cleanup) ---
+  const renderJobCard = ({ item }) => {
+    const isCompleted = item.status === 'completed';
+    const isScheduled = item.status === 'scheduled';
     
-    // Simulate map action
-    if (mapRef.current) {
-        // mapRef.current.animateCamera({...}) // Actual implementation goes here
+    // Payout color: neutral for completed, green for active
+    const payoutColor = isCompleted ? '#1F2937' : '#34A853'; 
+
+    const commonHeader = (
+      <View style={styles.jobHeader}>
+        <View style={styles.jobInfo}>
+          <Text style={styles.customerName}>{item.customerName || 'Customer'}</Text>
+          <Text style={styles.jobType}>
+            {(item.wasteType?.charAt(0).toUpperCase() + item.wasteType?.slice(1) || 'Waste') + ` • ${item.volume || 'N/A'}`}
+          </Text>
+          
+          {/* HIDE ADDRESS FOR COMPLETED JOBS */}
+          {!isCompleted && item.location?.address && (
+            <Text style={styles.jobLocation}>{item.location.address}</Text>
+          )}
+          {isCompleted && (
+            <View style={styles.ratingDisplay}>
+              <Ionicons name="star" size={16} color="#FFB300" />
+              {/* Assuming rating lives on the job document after it's been rated */}
+              <Text style={styles.ratingText}>{item.rating ? `${item.rating}/5 Rated` : 'Rate Customer'}</Text> 
+            </View>
+          )}
+        </View>
+
+        <View style={styles.jobMeta}>
+          <Text style={[styles.earnings, { color: payoutColor }]}>${Number(item.contractorEarnings).toFixed(2)}</Text>
+          
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}> 
+              {getStatusText(item.status)}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+
+    const footer = (
+      <View style={styles.jobFooter}>
+        <View style={styles.jobDetails}>
+          <View style={styles.detailItem}>
+            <Ionicons name="time-outline" size={16} color="#6B7280" />
+            <Text style={styles.detailText}>
+              {isScheduled ? `Scheduled: ${formatTime(item.scheduledTime)}` : 
+               isCompleted ? `Finished: ${formatTime(item.completedAt)}` :
+               `Accepted: ${formatTime(item.acceptedAt)}`}
+            </Text>
+          </View>
+          
+          {/* Only show distance for active jobs (assuming distance is calculated in parent screen/logic) */}
+          {!isCompleted && item.distance && (
+            <View style={styles.detailItem}>
+              <Ionicons name="location-outline" size={16} color="#6B7280" />
+              <Text style={styles.detailText}>{item.distance} mi away</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Action Buttons */}
+        {isScheduled && (
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => handleStartJob(item.id)}
+          >
+            <Text style={styles.actionButtonText}>Start</Text>
+          </TouchableOpacity>
+        )}
+
+        {item.status === 'in_progress' && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.completeButton]}
+            onPress={() => handleCompleteJob(item.id)}
+          >
+            <Text style={styles.actionButtonText}>Complete</Text>
+          </TouchableOpacity>
+        )}
+        
+        {/* Rating Button for Completed Jobs - only if not already rated */}
+        {isCompleted && !item.rating && (
+            <TouchableOpacity
+                style={[styles.actionButton, styles.rateButton]}
+                onPress={() => {
+                    setRateContext({
+                        jobId: item.id,
+                        customerId: item.customerId,
+                        customerName: item.customerName
+                    });
+                    setShowRateModal(true);
+                }}
+            >
+                <Text style={styles.actionButtonText}>Rate</Text>
+            </TouchableOpacity>
+        )}
+      </View>
+    );
+
+    // Completed jobs: render as a non-interactive View
+    if (isCompleted) {
+      return (
+        <View style={styles.jobCard}>
+          {commonHeader}
+          {footer}
+        </View>
+      );
     }
-  };
 
-  // Placeholder for job location confirmation (to permanently update Firestore)
-  const confirmJobLocation = async () => {
-    if (!navigationJob || !jobLocationPin) return;
-
-    Alert.alert(
-      'Confirm Location Update',
-      'Are you sure you want to permanently update the job\'s pickup coordinates?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm Update',
-          onPress: async () => {
-            try {
-              const jobRef = doc(db, 'jobs', navigationJob.id);
-              await updateDoc(jobRef, {
-                'pickupAddress.coordinates': jobLocationPin,
-                updatedAt: serverTimestamp(),
-              });
-
-              Alert.alert('Success', 'Job pickup location has been updated successfully.');
-            } catch (error) {
-              console.error('Jey: Error updating job location:', error);
-              Alert.alert('Error', 'Failed to update job location. Please try again.');
-            }
-          }
-        }
-      ]
+    // Active/scheduled jobs: keep clickable behavior
+    return (
+      <TouchableOpacity
+        style={styles.jobCard}
+        onPress={() => {
+          setSelectedJob(item);
+          setShowJobDetails(true);
+        }}
+        activeOpacity={0.7}
+      >
+        {commonHeader}
+        {footer}
+      </TouchableOpacity>
     );
   };
 
-
-  // --- UI Render Functions ---
-
-  const renderJobCard = ({ item }) => (
-    <TouchableOpacity
-      style={styles.jobCard}
-      onPress={() => {
-        setSelectedJob(item);
-        setShowJobDetails(true);
-      }}
-      activeOpacity={0.8}
-    >
-      <View style={styles.jobHeader}>
-        <View style={styles.jobInfo}>
-          <Text style={styles.customerName}>{item.customerName || 'Customer Pickup'}</Text>
-          <Text style={[styles.jobType, { color: getStatusColor(item.status) }]}>
-             <Text style={{fontWeight: '700'}}>{getStatusText(item.status)}</Text> • {item.wasteType?.toUpperCase() || 'N/A'} • {item.volume || 'N/A'}
-          </Text>
-          <Text style={styles.jobLocation}>
-            <Ionicons name="location-outline" size={14} color={Colors.textLight} /> {formatAddress(item)}
-          </Text>
-          <Text style={styles.scheduledTime}>
-            <Ionicons name="calendar-outline" size={14} color={Colors.textLight} /> {formatTime(item.scheduledTime)}
-          </Text>
-        </View>
-        <View style={styles.jobMeta}>
-          <Text style={styles.payoutText}>${(item.pricing?.contractorPayout || 0).toFixed(2)}</Text>
-          {item.status !== 'completed' && (
-            <TouchableOpacity
-              style={[styles.navigationButton, {backgroundColor: Colors.secondary, borderColor: Colors.secondary}]}
-              onPress={() => navigateToLocation(item)}
-            >
-              <Ionicons name="navigate-outline" size={18} style={styles.navigationButtonIcon} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="briefcase-outline" size={64} color={Colors.textLight} />
+      <Ionicons name="briefcase-outline" size={64} color="#9CA3AF" />
       <Text style={styles.emptyStateTitle}>
         {filter === 'active' ? 'No Active Jobs' : 
-         filter === 'completed' ? 'No Completed Jobs' : 'No Jobs Found'}
+         filter === 'completed' ? 'No Completed Jobs' : 'No Jobs Yet'}
       </Text>
       <Text style={styles.emptyStateDescription}>
         {filter === 'active' 
-          ? 'Accepted jobs will appear here when they are scheduled.'
+          ? 'Check the Available Jobs section to find new opportunities.'
           : filter === 'completed'
-          ? 'You haven\'t completed any jobs yet!'
+          ? 'Completed jobs will appear here after you finish them.'
           : 'Your accepted jobs will appear here.'}
       </Text>
       {/*
       {filter === 'active' && (
         <TouchableOpacity 
           style={styles.ctaButton}
-          onPress={() => navigation.navigate('ContractorDashboard', { showAllJobs: true })}
+          onPress={() => navigation.navigate('ContractorDashboard', { showAllJobs: true })} // Navigating back to Dashboard
         >
           <Text style={styles.ctaButtonText}>Find Available Jobs</Text>
         </TouchableOpacity>
@@ -546,117 +609,11 @@ const MyJobs = () => {
     </View>
   );
 
-  const renderNavigationModal = () => (
-    <Modal
-      visible={showNavigationModal}
-      animationType="slide"
-      onRequestClose={closeNavigation}
-      presentationStyle="fullScreen"
-    >
-      <SafeAreaView style={styles.navigationModalContainer}>
-        <View style={styles.navigationModalHeader}>
-          <Text style={styles.navigationModalTitle}>Navigate to Pickup</Text>
-          <TouchableOpacity onPress={closeNavigation} style={styles.modalCloseButton}>
-            <Ionicons name="close" size={28} color={Colors.textDark} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.mapContainer}>
-          {jobLocationPin ? (
-            <MapView
-              ref={mapRef}
-              style={styles.map}
-              initialRegion={{
-                latitude: jobLocationPin.latitude,
-                longitude: jobLocationPin.longitude,
-                latitudeDelta: 0.005,
-                longitudeDelta: 0.005,
-              }}
-              showsUserLocation
-              followsUserLocation
-              onRegionChangeComplete={(region) => checkPickupRange(region)} // Check range on map movement
-            >
-              <Marker
-                coordinate={jobLocationPin}
-                title={navigationJob?.customerName || 'Pickup Location'}
-                description={formatAddress(navigationJob)}
-                draggable
-                onDragEnd={handlePinDragEnd}
-              />
-              {currentLocation && (
-                <Marker
-                  coordinate={currentLocation}
-                  title="Your Location"
-                  pinColor={Colors.primary}
-                />
-              )}
-            </MapView>
-          ) : (
-            <View style={styles.mapLoading}>
-              <ActivityIndicator size="large" color={Colors.secondary} />
-              <Text style={styles.mapLoadingText}>Awaiting location data...</Text>
-            </View>
-          )}
-
-          {/* Map Controls */}
-          <View style={styles.mapControls}>
-            <TouchableOpacity style={styles.mapControlButton} onPress={toggle3DView}>
-              <MaterialIcons name={is3DEnabled ? "view-in-ar" : "view-carousel"} size={24} color={Colors.textDark} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.mapControlButton} onPress={getCurrentLocation}>
-              <MaterialIcons name="my-location" size={24} color={Colors.textDark} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.navigationFooter}>
-          <View style={styles.footerJobInfo}>
-            <Text style={styles.footerAddressLabel}>Location:</Text>
-            <Text style={styles.footerAddressText} numberOfLines={1}>{formatAddress(navigationJob)}</Text>
-          </View>
-
-          <TouchableOpacity
-            style={[
-              styles.pickupConfirmationButton,
-              isWithinPickupRange ? styles.inRangeButton : styles.outOfRangeButton,
-            ]}
-            onPress={handlePickupConfirmation}
-            disabled={!isWithinPickupRange}
-          >
-            <Text style={styles.pickupConfirmationText}>
-              {isWithinPickupRange ? 'CONFIRM ARRIVAL & START JOB' : `Move closer to start (Range: ${DISTANCE_THRESHOLD_FEET} ft)`}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.navigationExternalActions}>
-            <TouchableOpacity 
-              style={styles.externalActionButton} 
-              onPress={openExternalNavigation}
-            >
-              <Ionicons name="logo-google" size={20} color={Colors.secondary} />
-              <Text style={styles.externalActionButtonText}>Open in Google Maps</Text>
-            </TouchableOpacity>
-
-            {jobLocationPin && (
-              <TouchableOpacity 
-                style={styles.externalActionButton} 
-                onPress={confirmJobLocation}
-              >
-                <Ionicons name="pin-outline" size={20} color={Colors.textMedium} />
-                <Text style={styles.externalActionButtonText}>Confirm Pinned Location</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </SafeAreaView>
-    </Modal>
-  );
-
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <SharedHeader 
         title="My Jobs" 
-        showBackButton={false}
+        showBackButton 
         rightComponent={
           <View style={styles.filterContainer}>
             <TouchableOpacity
@@ -678,10 +635,11 @@ const MyJobs = () => {
           </View>
         }
       />
-      {isLoading ? (
-        <View style={styles.loadingView}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading your job list...</Text>
+      
+      {loading ? (
+        <View style={styles.loadingOverlay}>
+          <Ionicons name="sync-circle-outline" size={32} color="#34A853" />
+          <Text style={styles.loadingText}>Loading jobs...</Text>
         </View>
       ) : (
         <FlatList
@@ -692,17 +650,18 @@ const MyJobs = () => {
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={isRefreshing}
+              refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={[Colors.primary]}
-              tintColor={Colors.primary}
+              colors={['#34A853']}
+              tintColor="#34A853"
             />
           }
           ListEmptyComponent={renderEmptyState}
         />
       )}
 
-      {/* Job Details Modal */}
+
+      {/* Job Details Modal (retained, ensures Timestamp dates are handled by formatTime) */}
       <Modal
         visible={showJobDetails}
         animationType="slide"
@@ -713,7 +672,7 @@ const MyJobs = () => {
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => setShowJobDetails(false)}>
-                <Ionicons name="close" size={28} color={Colors.textMedium} />
+                <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
               <Text style={styles.modalTitle}>Job Details</Text>
               <View style={styles.modalHeaderSpacer} />
@@ -725,7 +684,7 @@ const MyJobs = () => {
                 <Text style={styles.modalSectionTitle}>Customer</Text>
                 <Text style={styles.customerDetailName}>{selectedJob.customerName || 'N/A'}</Text>
                 <TouchableOpacity style={styles.contactButton}>
-                  <Ionicons name="chatbubble-outline" size={20} color={Colors.primary} />
+                  <Ionicons name="chatbubble-outline" size={20} color="#34A853" />
                   <Text style={styles.contactButtonText}>Message Customer</Text>
                 </TouchableOpacity>
               </View>
@@ -736,21 +695,19 @@ const MyJobs = () => {
                 <View style={styles.infoGrid}>
                   <View style={styles.infoItem}>
                     <Text style={styles.infoLabel}>Type</Text>
-                    <Text style={styles.infoValue}>{selectedJob.wasteType?.toUpperCase() || 'N/A'}</Text>
+                    <Text style={styles.infoValue}>{selectedJob.wasteType || 'N/A'}</Text>
                   </View>
                   <View style={styles.infoItem}>
                     <Text style={styles.infoLabel}>Volume</Text>
                     <Text style={styles.infoValue}>{selectedJob.volume || 'N/A'}</Text>
                   </View>
                   <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>Payout</Text>
-                    <Text style={[styles.infoValue, {color: Colors.primary}]}>
-                      ${(selectedJob.pricing?.contractorPayout || 0).toFixed(2)}
-                    </Text>
+                    <Text style={styles.infoLabel}>Earnings</Text>
+                    <Text style={styles.infoValue}>${Number(selectedJob.contractorEarnings).toFixed(2)}</Text>
                   </View>
                   <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>Scheduled Time</Text>
-                    <Text style={styles.infoValue}>{formatTime(selectedJob.scheduledTime)}</Text>
+                    <Text style={styles.infoLabel}>Distance</Text>
+                    <Text style={styles.infoValue}>{selectedJob.distance || 'N/A'} mi</Text>
                   </View>
                 </View>
               </View>
@@ -758,30 +715,27 @@ const MyJobs = () => {
               {/* Location */}
               <View style={styles.modalSection}>
                 <Text style={styles.modalSectionTitle}>Pickup Location</Text>
-                <Text style={styles.addressText}>{formatAddress(selectedJob)}</Text>
+                <Text style={styles.addressText}>{selectedJob.location?.address || selectedJob.pickupAddress?.fullAddress || 'Address Missing'}</Text>
                 <TouchableOpacity 
-                  style={[styles.modalActionButton, { backgroundColor: Colors.secondary }]}
-                  onPress={() => {
-                    setShowJobDetails(false);
-                    navigateToLocation(selectedJob);
-                  }}
+                  style={styles.navigationButton}
+                  onPress={() => navigateToLocation(selectedJob)}
                 >
-                  <Ionicons name="navigate-outline" size={20} color={Colors.cardBackground} />
-                  <Text style={styles.modalActionButtonText}>Start Navigation</Text>
+                  <Ionicons name="navigate-outline" size={20} color="#3B82F6" />
+                  <Text style={styles.navigationButtonText}>Get Directions</Text>
                 </TouchableOpacity>
               </View>
 
               {/* Notes */}
-              {selectedJob.details && (
+              {selectedJob.notes && (
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Job Details / Notes</Text>
-                  <Text style={styles.notesText}>{selectedJob.details}</Text>
+                  <Text style={styles.modalSectionTitle}>Customer Notes</Text>
+                  <Text style={styles.notesText}>{selectedJob.notes}</Text>
                 </View>
               )}
 
               {/* Status & Actions */}
-              <View style={[styles.modalSection, styles.actionSectionFooter]}>
-                <Text style={styles.modalSectionTitle}>Job Status</Text>
+              <View style={styles.modalSection}>
+                <Text style={styles.modalSectionTitle}>Status</Text>
                 <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedJob.status) + '20' }]}>
                   <Text style={[styles.statusText, { color: getStatusColor(selectedJob.status) }]}>
                     {getStatusText(selectedJob.status)}
@@ -808,7 +762,7 @@ const MyJobs = () => {
                       handleCompleteJob(selectedJob.id);
                     }}
                   >
-                    <Text style={styles.modalActionButtonText}>Confirm Completion</Text>
+                    <Text style={styles.modalActionButtonText}>Complete Job</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -816,6 +770,7 @@ const MyJobs = () => {
           </View>
         )}
       </Modal>
+<<<<<<< HEAD
       
       {/* Navigation Modal */}
       {renderNavigationModal()}
@@ -831,28 +786,61 @@ const MyJobs = () => {
         title="Rate Customer"
       />
     </SafeAreaView>
+=======
+
+      {/* Rate Customer Modal (unchanged) */}
+      <RateUserModal
+        visible={showRateModal}
+        onClose={() => setShowRateModal(false)}
+        title={rateContext?.customerName ? `Rate ${rateContext.customerName}` : 'Rate Customer'}
+        onSubmit={async ({ rating, review }) => {
+          try {
+            if (!rateContext || !auth.currentUser) return;
+            // Create rating document
+            await addDoc(collection(db, 'ratings'), {
+              jobId: rateContext.jobId,
+              raterId: auth.currentUser.uid,
+              raterRole: 'contractor',
+              ratedUserId: rateContext.customerId,
+              rating,
+              review: review || '',
+              createdAt: serverTimestamp(),
+            });
+
+            // Update aggregates on rated user's doc
+            const ratedUserRef = doc(db, 'users', rateContext.customerId);
+            await updateDoc(ratedUserRef, {
+              'ratings.count': increment(1),
+              'ratings.sum': increment(rating),
+            });
+            
+            // Local update to mark job as rated, which removes the "Rate" button
+            setJobs(prev => 
+                prev.map(job => 
+                    job.id === rateContext.jobId ? {...job, rating: rating} : job
+                )
+            );
+          } catch (e) {
+            console.error('Error submitting rating:', e);
+          } finally {
+            setShowRateModal(false);
+            setRateContext(null);
+          }
+        }}
+      />
+    </View>
+>>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
   );
 };
 
-// --- Stylesheet ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
-  },
-  loadingView: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: Colors.textMedium,
+    backgroundColor: '#ffffff',
   },
   filterContainer: {
     flexDirection: 'row',
-    backgroundColor: Colors.border,
+    backgroundColor: '#F3F4F6',
     borderRadius: 8,
     padding: 2,
   },
@@ -862,167 +850,186 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   activeFilter: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#34A853',
   },
   filterText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: Colors.textLight,
+    fontWeight: '500',
+    color: '#6B7280',
   },
   activeFilterText: {
-    color: Colors.cardBackground,
+    color: '#FFFFFF',
   },
   listContainer: {
     padding: 16,
   },
   emptyContainer: {
-    flexGrow: 1,
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    backgroundColor: Colors.background,
   },
   jobCard: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
-    borderLeftWidth: 5,
-    borderLeftColor: Colors.primary,
+    shadowRadius: 8,
+    elevation: 4,
   },
   jobHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    marginBottom: 12,
   },
   jobInfo: {
     flex: 1,
   },
   customerName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    color: Colors.textDark,
+    color: '#1F2937',
     marginBottom: 4,
   },
   jobType: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 8,
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
   },
   jobLocation: {
     fontSize: 14,
-    color: Colors.textMedium,
-    marginBottom: 4,
-  },
-  scheduledTime: {
-    fontSize: 14,
-    color: Colors.textMedium,
+    color: '#6B7280',
   },
   jobMeta: {
     alignItems: 'flex-end',
   },
-  payoutText: {
+  earnings: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.primary,
     marginBottom: 8,
   },
-  navigationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  jobFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  navigationButtonIcon: {
-    color: Colors.cardBackground,
+  jobDetails: {
+    flex: 1,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  detailText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 8,
+  },
+  actionButton: {
+    backgroundColor: '#34A853',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  completeButton: {
+    backgroundColor: '#F59E0B',
+  },
+  rateButton: {
+    backgroundColor: '#3B82F6',
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   emptyState: {
     alignItems: 'center',
-    padding: 20,
   },
   emptyStateTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: Colors.textDark,
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1F2937',
     marginTop: 16,
     marginBottom: 8,
   },
   emptyStateDescription: {
     fontSize: 16,
-    color: Colors.textMedium,
+    color: '#6B7280',
     textAlign: 'center',
     lineHeight: 24,
   },
   ctaButton: {
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: 24,
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
-    marginTop: 20,
+    marginTop: 16,
   },
   ctaButtonText: {
-    color: Colors.cardBackground,
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
   },
-  // --- Modal Styles ---
   modalContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#ffffff',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 0 : 20,
-    paddingBottom: 16,
-    backgroundColor: Colors.cardBackground,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: '#E5E7EB',
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.textDark,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
   },
   modalHeaderSpacer: {
-    width: 28,
+    width: 24,
   },
   modalContent: {
     flex: 1,
-    padding: 24,
+    padding: 20,
   },
   modalSection: {
-    backgroundColor: Colors.cardBackground,
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 20,
-    marginBottom: 20,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 2,
   },
   modalSectionTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textDark,
+    fontWeight: '600',
+    color: '#1F2937',
     marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    paddingBottom: 8,
   },
   customerDetailName: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.textDark,
+    color: '#1F2937',
     marginBottom: 12,
   },
   contactButton: {
@@ -1030,184 +1037,89 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    marginTop: 10,
   },
   contactButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.primary,
+    color: '#34A853',
   },
   infoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    gap: 16,
   },
   infoItem: {
-    width: '48%',
-    marginBottom: 16,
+    flex: 1,
+    minWidth: '45%',
   },
   infoLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
-    color: Colors.textLight,
+    color: '#6B7280',
     marginBottom: 4,
   },
   infoValue: {
     fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textDark,
+    fontWeight: '600',
+    color: '#1F2937',
   },
   addressText: {
     fontSize: 16,
-    color: Colors.textDark,
+    color: '#1F2937',
     marginBottom: 12,
+  },
+  navigationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  navigationButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3B82F6',
   },
   notesText: {
     fontSize: 15,
-    color: Colors.textMedium,
+    color: '#374151',
     lineHeight: 22,
+    backgroundColor: '#ffffff',
+    padding: 12,
+    borderRadius: 8,
   },
   modalActionButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    backgroundColor: '#34A853',
+    borderRadius: 8,
+    paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: Colors.primary,
-    borderRadius: 10,
-    paddingVertical: 14,
     marginTop: 16,
-    gap: 8,
   },
   modalActionButtonText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: Colors.cardBackground,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  completeButton: {
-    backgroundColor: Colors.warning,
+  ratingDisplay: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 4,
   },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginBottom: 16,
+  ratingText: {
+      fontSize: 14,
+      color: '#FFB300',
+      marginLeft: 4,
+      fontWeight: '600',
   },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  actionSectionFooter: {
-    marginBottom: 40,
-  },
-  // --- Navigation Modal Styles ---
-  navigationModalContainer: {
-    flex: 1,
-    backgroundColor: Colors.cardBackground,
-  },
-  navigationModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  navigationModalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.textDark,
-  },
-  modalCloseButton: {
-    position: 'absolute',
-    right: 15,
-    padding: 5,
-  },
-  mapContainer: {
-    flex: 1,
-  },
-  map: {
-    flex: 1,
-  },
-  mapLoading: {
+  loadingOverlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    padding: 32,
   },
-  mapLoadingText: {
-    marginTop: 10,
-    color: Colors.textMedium,
-  },
-  mapControls: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 10,
-    padding: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  mapControlButton: {
-    padding: 8,
-  },
-  navigationFooter: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  footerJobInfo: {
-    marginBottom: 15,
-  },
-  footerAddressLabel: {
-    fontSize: 13,
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 8,
     fontWeight: '500',
-    color: Colors.textLight,
-  },
-  footerAddressText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.textDark,
-  },
-  pickupConfirmationButton: {
-    borderRadius: 12,
-    paddingVertical: 18,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  inRangeButton: {
-    backgroundColor: Colors.primary,
-  },
-  outOfRangeButton: {
-    backgroundColor: Colors.textLight,
-  },
-  pickupConfirmationText: {
-    color: Colors.cardBackground,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  navigationExternalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  externalActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-    gap: 5,
-  },
-  externalActionButtonText: {
-    fontSize: 13,
-    color: Colors.textMedium,
-    fontWeight: '600',
   },
 });
 

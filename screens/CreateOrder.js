@@ -59,7 +59,7 @@ const CreateOrder = ({ navigation, route }) => {
       name: '1-5 Bags', 
       description: 'Small household bags',
       icon: 'bag',
-      basePrice: 15
+      basePrice: 1
     },
     { 
       id: 'pickup_load', 

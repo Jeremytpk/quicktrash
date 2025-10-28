@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db, auth } from '../firebaseConfig';
 import {
   View,
   Text,
@@ -7,13 +9,18 @@ import {
   ScrollView,
   Image,
   Modal,
+  Platform,
   Dimensions,
+  Alert, // Jey: Added Alert for user feedback
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
+<<<<<<< HEAD
 import RateUserModal from '../components/RateUserModal';
 // import OrderBasket from '../components/OrderBasket'; // Removed OrderBasket
+=======
+>>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
 import LocationService from '../services/LocationService';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -48,57 +55,22 @@ const CustomerDashboard = ({ navigation }) => {
   const [jobToRate, setJobToRate] = useState(null);
   const [ratedJobs, setRatedJobs] = useState(new Set());
 
-  useEffect(() => {
-    // Initialize location service for customers
-    const initLocation = async () => {
-      try {
-        // Request permissions
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setLocationError('Location permission denied');
-          // Default to Atlanta if permission denied
-          const atlantaLocation = {
-            latitude: 33.7490,
-            longitude: -84.3880,
-            accuracy: 1000,
-            timestamp: new Date(),
-          };
-          setCurrentLocation(atlantaLocation);
-          setMapRegion({
-            latitude: atlantaLocation.latitude,
-            longitude: atlantaLocation.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          });
-          return;
-        }
+  const wasteTypes = [
+    { id: 'household', name: 'Household Trash', icon: 'home', color: '#34A853' },
+    { id: 'bulk', name: 'Bulk Items', icon: 'cube', color: '#FF8F00' },
+    { id: 'yard', name: 'Yard Waste', icon: 'leaf', color: '#4CAF50' },
+    { id: 'construction', name: 'Construction Debris', icon: 'construct', color: '#795548' },
+    { id: 'recyclables', name: 'Recyclables', icon: 'refresh', color: '#2196F3' },
+  ];
 
-        // Get current location
-        const position = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        
-        const locationData = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          timestamp: new Date(),
-        };
-        
-        setCurrentLocation(locationData);
-        setMapRegion({
-          latitude: locationData.latitude,
-          longitude: locationData.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-        setIsLocationTracking(true);
-        setLocationError(null);
-
-      } catch (error) {
-        console.error('Error getting location:', error);
-        setLocationError('Failed to get location');
-        // Default to Atlanta on error
+  // --- Core Location Logic ---
+  const initLocation = async (shouldNavigate = false) => {
+    try {
+      // Request permissions
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationError('Location permission denied');
+        // Default to Atlanta if permission denied
         const atlantaLocation = {
           latitude: 33.7490,
           longitude: -84.3880,
@@ -112,12 +84,33 @@ const CustomerDashboard = ({ navigation }) => {
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         });
+        setIsLocationTracking(false);
+        return;
       }
-    };
 
-    initLocation();
-  }, []);
+      // Get current location
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      
+      const locationData = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        timestamp: new Date(),
+      };
+      
+      setCurrentLocation(locationData);
+      setMapRegion({
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+      setIsLocationTracking(true);
+      setLocationError(null);
 
+<<<<<<< HEAD
   // Listen for completed jobs that need rating
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -228,18 +221,36 @@ const CustomerDashboard = ({ navigation }) => {
 
   const handleNewOrder = () => {
     setShowOrderModal(true);
+=======
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setLocationError('Failed to get location');
+      // Default to Atlanta on error
+      const atlantaLocation = {
+        latitude: 33.7490,
+        longitude: -84.3880,
+        accuracy: 1000,
+        timestamp: new Date(),
+      };
+      setCurrentLocation(atlantaLocation);
+      setMapRegion({
+        latitude: atlantaLocation.latitude,
+        longitude: atlantaLocation.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+      setIsLocationTracking(false);
+    }
+>>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
   };
-
-  const handleOrderType = (wasteType) => {
-    setShowOrderModal(false);
-    navigation.navigate('CreateOrder', { wasteType });
-  };
-
+  
+  // Jey: Extracted and corrected the refresh logic
   const refreshLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setLocationError('Location permission denied');
+        setLocationError('Location permission denied. Cannot refresh.');
+        setIsLocationTracking(false);
         return;
       }
 
@@ -263,12 +274,34 @@ const CustomerDashboard = ({ navigation }) => {
       });
       setIsLocationTracking(true);
       setLocationError(null);
+      Alert.alert('Location Updated', `Accuracy: ±${Math.round(locationData.accuracy)}m`);
 
     } catch (error) {
       console.error('Error refreshing location:', error);
-      setLocationError('Failed to refresh location');
+      setLocationError('Failed to refresh location. Please try again.');
+      setIsLocationTracking(false);
     }
   };
+
+  // --- Lifecycle and Initial Call ---
+  useEffect(() => {
+    initLocation();
+  }, []);
+
+  // --- Missing Function Definitions (Fixed) ---
+  const handleNewOrder = () => {
+    // Jey: Logic to open the modal for selecting waste type
+    setShowOrderModal(true);
+  };
+
+  const handleOrderType = (type) => {
+    // Jey: Logic to handle selection and navigate/proceed
+    setShowOrderModal(false);
+    // Alert.alert('Selected', `You chose: ${type.name}. Proceeding to volume selection.`);
+    navigation.navigate('NewOrderScreen', { wasteType: type.id }); // Placeholder navigation
+  };
+  // --- End Missing Function Definitions ---
+
 
   return (
     <View style={styles.container}>
@@ -279,10 +312,10 @@ const CustomerDashboard = ({ navigation }) => {
         rightComponent={
           <View style={styles.headerActions}>
             {/* Replaced OrderBasket with a recycling icon */}
-            <TouchableOpacity style={styles.recyclingButton}>
+            <TouchableOpacity style={styles.recyclingButton} onPress={() => navigation.navigate('OrderHistory')}>
               <Ionicons name="trash-bin-outline" size={24} color="#333" /> 
             </TouchableOpacity>
-            <TouchableOpacity style={styles.notificationButton}>
+            <TouchableOpacity style={styles.notificationButton} onPress={() => Alert.alert('Notifications', 'No new alerts.')}>
               <Ionicons name="notifications-outline" size={24} color="#333" />
             </TouchableOpacity>
           </View>
@@ -332,43 +365,50 @@ const CustomerDashboard = ({ navigation }) => {
               </View>
               
               <View style={styles.mapContainer}>
-                <MapView
-                  style={styles.map}
-                  region={mapRegion}
-                  showsUserLocation={false}
-                  showsMyLocationButton={false}
-                  showsCompass={true}
-                  showsScale={true}
-                  mapType="standard"
-                  showsPointsOfInterest={true}
-                  showsBuildings={true}
-                  showsTraffic={false}
-                >
-                  <Marker
-                    coordinate={{
-                      latitude: currentLocation.latitude,
-                      longitude: currentLocation.longitude,
-                    }}
-                    title="Your Location"
-                    description={isLocationTracking ? 
-                      `GPS Accuracy: ±${Math.round(currentLocation.accuracy)} meters` : 
-                      'Default location - tap refresh to get your current location'
-                    }
+                {mapRegion ? (
+                  <MapView
+                    style={styles.map}
+                    region={mapRegion}
+                    showsUserLocation={false}
+                    showsMyLocationButton={false}
+                    showsCompass={true}
+                    showsScale={true}
+                    mapType="standard"
+                    showsPointsOfInterest={true}
+                    showsBuildings={true}
+                    showsTraffic={false}
                   >
-                    <View style={styles.customerMarker}>
-                      <View style={styles.markerInner}>
-                        <Ionicons name="home" size={16} color="#FFFFFF" />
+                    <Marker
+                      coordinate={{
+                        latitude: currentLocation.latitude,
+                        longitude: currentLocation.longitude,
+                      }}
+                      title="Your Location"
+                      description={isLocationTracking ? 
+                        `GPS Accuracy: ±${Math.round(currentLocation.accuracy)} meters` : 
+                        'Default location - tap refresh to get your current location'
+                      }
+                    >
+                      <View style={styles.customerMarker}>
+                        <View style={styles.markerInner}>
+                          <Ionicons name="home" size={16} color="#FFFFFF" />
+                        </View>
+                        {isLocationTracking && <View style={styles.markerPulse} />}
                       </View>
-                      {isLocationTracking && <View style={styles.markerPulse} />}
-                    </View>
-                  </Marker>
-                </MapView>
+                    </Marker>
+                  </MapView>
+                ) : (
+                  <View style={styles.mapLoading}>
+                      <ActivityIndicator size="large" color="#34A853" />
+                      <Text style={styles.mapLoadingText}>Loading Map...</Text>
+                  </View>
+                )}
               </View>
               
               <View style={styles.mapFooter}>
                 <View style={styles.coordsInfo}>
                   <Text style={styles.coordsText}>
-                    {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
+                    Lat: {currentLocation.latitude.toFixed(4)}, Long: {currentLocation.longitude.toFixed(4)}
                   </Text>
                 </View>
                 {locationError ? (
@@ -404,7 +444,7 @@ const CustomerDashboard = ({ navigation }) => {
         </View>
 
         {/* Recent Orders */}
-        <View style={styles.section}>
+        <View style={[styles.section, { marginBottom: 30 }]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Orders</Text>
             <TouchableOpacity onPress={() => navigation.navigate('OrderHistory')}>
@@ -412,26 +452,11 @@ const CustomerDashboard = ({ navigation }) => {
             </TouchableOpacity>
           </View>
           
-          {recentOrders.length > 0 ? (
-            recentOrders.map((order) => (
-              <View key={order.id} style={styles.orderCard}>
-                <View style={styles.orderInfo}>
-                  <Text style={styles.orderType}>{order.type}</Text>
-                  <Text style={styles.orderDate}>{order.date}</Text>
-                </View>
-                <View style={styles.orderStatus}>
-                  <Text style={styles.orderAmount}>{order.amount}</Text>
-                  <Text style={[styles.statusText, { color: '#34A853' }]}>{order.status}</Text>
-                </View>
-              </View>
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="document-outline" size={48} color="#9CA3AF" />
-              <Text style={styles.emptyStateText}>No orders yet</Text>
-              <Text style={styles.emptyStateSubtext}>Your pickup history will appear here</Text>
-            </View>
-          )}
+          <View style={styles.emptyState}>
+            <Ionicons name="trash-outline" size={40} color="#9CA3AF" />
+            <Text style={styles.emptyStateText}>No recent orders</Text>
+            <Text style={styles.emptyStateSubtext}>Request your first pickup now!</Text>
+          </View>
         </View>
       </ScrollView>
 
@@ -553,15 +578,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    gap: 12, // Jey: Added gap for consistent spacing
+    marginVertical: 4,
   },
   serviceCard: {
-    width: (width - 60) / 2,
+    width: (width - 60 - 12) / 2, // Jey: Adjusted width for gap spacing
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 0, // Removed bottom margin since gap handles spacing
     borderWidth: 1,
+    borderColor: '#E5E7EB', // Default light border
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -618,6 +646,8 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
   },
   emptyStateText: {
     fontSize: 16,
@@ -745,6 +775,15 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
+  mapLoading: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+  },
+  mapLoadingText: {
+      marginTop: 8,
+      color: '#6B7280',
+  },
   customerMarker: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -788,7 +827,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1F2937',
-    fontFamily: 'monospace',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', // Jey: Added specific platform monospace font
   },
   lastUpdateText: {
     fontSize: 12,

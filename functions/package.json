@@ -1,0 +1,19 @@
+{
+  "name": "quicktrash-functions",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "firebase-admin": "^11.11.1",
+    "firebase-functions": "^4.9.0",
+    "stripe": "^11.18.0"
+  },
+  "scripts": {
+    "lint": "echo 'no lint'",
+    "deploy": "firebase deploy --only functions"
+  }
+}
