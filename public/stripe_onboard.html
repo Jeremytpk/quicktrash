@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QuickTrash - Add Payout Card</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; }
+      .card { max-width: 520px; margin: 0 auto; }
+      .btn { background: #34A853; color: white; border: none; padding: 10px 14px; border-radius: 6px; cursor: pointer; }
+      .status { margin-top: 12px; padding: 12px; border-radius: 8px; background: #F3F4F6; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Add Debit Card for Payouts</h2>
+      <p>This hosted page uses Stripe.js to securely tokenize card details. It will send a token to the backend and attach it to your connected account.</p>
+
+      <div id="element"></div>
+
+      <button id="submit" class="btn">Save Card</button>
+
+      <div id="status" class="status" style="display:none"></div>
+    </div>
+
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+      // Query params: ?publishableKey=pk_live_xxx&connectedAccountId=acct_...
+      const params = new URLSearchParams(window.location.search);
+      const publishableKey = params.get('publishableKey') || '{{REPLACE_WITH_PK}}';
+      const connectedAccountId = params.get('connectedAccountId');
+
+      if (!publishableKey || publishableKey.includes('{{REPLACE')) {
+        document.getElementById('status').style.display = 'block';
+        document.getElementById('status').innerText = 'Missing publishableKey in URL. Append ?publishableKey=pk_live_...&connectedAccountId=acct_...';
+        document.getElementById('submit').disabled = true;
+        throw new Error('Missing publishableKey');
+      }
+
+      const stripe = Stripe(publishableKey);
+
+      const elements = stripe.elements();
+      const style = {
+        base: {
+          color: '#32325d',
+          fontFamily: 'Arial, sans-serif',
+          fontSmoothing: 'antialiased',
+          fontSize: '16px',
+          '::placeholder': { color: '#a0aec0' }
+        },
+        invalid: { color: '#fa755a', iconColor: '#fa755a' }
+      };
+
+      const card = elements.create('card', { style });
+      card.mount('#element');
+
+      const statusEl = document.getElementById('status');
+      const submit = document.getElementById('submit');
+
+      submit.addEventListener('click', async () => {
+        submit.disabled = true;
+        statusEl.style.display = 'block';
+        statusEl.innerText = 'Tokenizing card...';
+
+        const { token, error } = await stripe.createToken(card);
+        if (error) {
+          statusEl.innerText = 'Stripe tokenization error: ' + error.message;
+          submit.disabled = false;
+          return;
+        }
+
+        statusEl.innerText = 'Sending token to backend...';
+
+        try {
+          const resp = await fetch('/api/attach-external-account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connectedAccountId, token: token.id })
+          });
+
+          const json = await resp.json();
+          if (!resp.ok) throw new Error(json.error || JSON.stringify(json));
+
+          statusEl.innerText = 'Success! Card attached. You can close this page.';
+        } catch (e) {
+          statusEl.innerText = 'Server error: ' + e.message;
+        } finally {
+          submit.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "255447451336",
+    "firebase_url": "https://quicktrash-1cdff-default-rtdb.firebaseio.com",
+    "project_id": "quicktrash-1cdff",
+    "storage_bucket": "quicktrash-1cdff.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:255447451336:android:e74ec8f2fafb4f15c2c7fd",
+        "android_client_info": {
+          "package_name": "com.jeremytpk.QT"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "255447451336-p7lmdjd5auu5eqni98lt1691j49kvns5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDXNF3ZqeKodzH79Z6kFtiFm2BntjhSsuY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "255447451336-p7lmdjd5auu5eqni98lt1691j49kvns5.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "255447451336-vf552svq3o7omsesbuhapuon2ufvrhmv.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.jeremytpk.QT"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
