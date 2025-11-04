@@ -290,6 +290,11 @@ function App() {
             component={WithdrawModal}
             options={{ presentation: 'modal', headerShown: false }} 
           />
+          <Stack.Screen 
+            name="PaymentModal"
+            component={require('./components/PaymentModal').default}
+            options={{ headerShown: false }} 
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </UserProvider>

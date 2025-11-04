@@ -9,7 +9,6 @@ import {
   Alert,
   Modal,
   ScrollView,
-<<<<<<< HEAD
   Platform,
   Linking,
   ActivityIndicator, // Added ActivityIndicator for better loading UX
@@ -17,13 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons'; // Added MaterialIcons
 import SharedHeader from '../components/SharedHeader';
-import RateUserModal from '../components/RateUserModal';
 import * as Location from 'expo-location';
-=======
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import SharedHeader from '../components/SharedHeader';
->>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
 import { useUser } from '../contexts/UserContext';
 import { db, auth } from '../firebaseConfig';
 import { 
@@ -35,14 +28,9 @@ import {
   updateDoc,
   serverTimestamp,
   addDoc,
-<<<<<<< HEAD
   getDoc,
   setDoc,
   increment
-=======
-  increment,
-  limit
->>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
 } from 'firebase/firestore';
 import RateUserModal from '../components/RateUserModal';
 
@@ -87,7 +75,6 @@ const MyJobs = ({ navigation }) => { // Added navigation to props if needed for 
   const [selectedJob, setSelectedJob] = useState(null);
   const [showJobDetails, setShowJobDetails] = useState(false);
   const [filter, setFilter] = useState('active'); // active, completed, all
-<<<<<<< HEAD
   const [showNavigationModal, setShowNavigationModal] = useState(false);
   const [navigationJob, setNavigationJob] = useState(null);
   const [jobLocationPin, setJobLocationPin] = useState(null);
@@ -96,10 +83,6 @@ const MyJobs = ({ navigation }) => { // Added navigation to props if needed for 
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isWithinPickupRange, setIsWithinPickupRange] = useState(false);
   const [is3DEnabled, setIs3DEnabled] = useState(false);
-=======
-  const [showRateModal, setShowRateModal] = useState(false);
-  const [rateContext, setRateContext] = useState(null); // { jobId, customerId, customerName }
->>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
   
   // NOTE: Mock job IDs are gone; now using dynamic Firestore data
 
@@ -249,28 +232,11 @@ const MyJobs = ({ navigation }) => { // Added navigation to props if needed for 
                 completedAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               });
-<<<<<<< HEAD
               setSelectedJob(prev => prev ? {...prev, status: 'completed'} : null);
               
               // Prompt contractor to rate the customer
               setJobToRate({ id: jobId, customerId: jobData.customerId, contractorId: jobData.contractorId });
               setShowRatingModal(true);
-=======
-              
-              // Find the job locally to get rating context before the list refreshes
-              const jobToRate = jobs.find(j => j.id === jobId);
-              if (jobToRate) {
-                  setRateContext({
-                      jobId: jobToRate.id,
-                      customerId: jobToRate.customerId,
-                      customerName: jobToRate.customerName
-                  });
-                  setShowRateModal(true);
-              }
-
-              Alert.alert('Success', 'Job completed! Your payment is being processed.');
-              setShowJobDetails(false);
->>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
             } catch (error) {
               console.error('Jey: Error completing job:', error);
               Alert.alert('Error', 'Failed to complete job. Please try again.');
@@ -281,7 +247,6 @@ const MyJobs = ({ navigation }) => { // Added navigation to props if needed for 
     );
   };
 
-<<<<<<< HEAD
   const handleSubmitRating = async ({ rating, review }) => {
     try {
       if (!jobToRate) return;
@@ -450,11 +415,6 @@ const MyJobs = ({ navigation }) => { // Added navigation to props if needed for 
     setIsWithinPickupRange(false);
     setIs3DEnabled(false);
   };
-=======
-  // --- Placeholder Logic (removed dependencies on mocked fields) ---
-  const navigateToLocation = (job) => { Alert.alert('Navigate', `Directions to ${job.location?.address || 'Pickup Location'}`); };
-  const openExternalNavigation = () => { Alert.alert('External Nav', 'Launching external map app...'); };
->>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
   
   // --- Render Job Card (minor cleanup) ---
   const renderJobCard = ({ item }) => {
@@ -770,7 +730,6 @@ const MyJobs = ({ navigation }) => { // Added navigation to props if needed for 
           </View>
         )}
       </Modal>
-<<<<<<< HEAD
       
       {/* Navigation Modal */}
       {renderNavigationModal()}
@@ -785,51 +744,7 @@ const MyJobs = ({ navigation }) => { // Added navigation to props if needed for 
         onSubmit={handleSubmitRating}
         title="Rate Customer"
       />
-    </SafeAreaView>
-=======
-
-      {/* Rate Customer Modal (unchanged) */}
-      <RateUserModal
-        visible={showRateModal}
-        onClose={() => setShowRateModal(false)}
-        title={rateContext?.customerName ? `Rate ${rateContext.customerName}` : 'Rate Customer'}
-        onSubmit={async ({ rating, review }) => {
-          try {
-            if (!rateContext || !auth.currentUser) return;
-            // Create rating document
-            await addDoc(collection(db, 'ratings'), {
-              jobId: rateContext.jobId,
-              raterId: auth.currentUser.uid,
-              raterRole: 'contractor',
-              ratedUserId: rateContext.customerId,
-              rating,
-              review: review || '',
-              createdAt: serverTimestamp(),
-            });
-
-            // Update aggregates on rated user's doc
-            const ratedUserRef = doc(db, 'users', rateContext.customerId);
-            await updateDoc(ratedUserRef, {
-              'ratings.count': increment(1),
-              'ratings.sum': increment(rating),
-            });
-            
-            // Local update to mark job as rated, which removes the "Rate" button
-            setJobs(prev => 
-                prev.map(job => 
-                    job.id === rateContext.jobId ? {...job, rating: rating} : job
-                )
-            );
-          } catch (e) {
-            console.error('Error submitting rating:', e);
-          } finally {
-            setShowRateModal(false);
-            setRateContext(null);
-          }
-        }}
-      />
-    </View>
->>>>>>> e936db1 (Auto-insert '/' after 2 digits in Expiry field for WithdrawToDebit and bugfixes)
+  </View>
   );
 };
 
