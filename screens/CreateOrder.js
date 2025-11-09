@@ -195,14 +195,7 @@ const CreateOrder = ({ navigation, route }) => {
       };
 
       const docRef = await addDoc(collection(db, 'jobs'), orderData);
-      
-      Alert.alert(
-        'Order Created!',
-        'Your pickup request has been submitted. We\'ll notify you when a picker accepts your job.',
-        [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]
-      );
+      navigation.navigate('PaymentModal', { orderId: docRef.id });
     } catch (error) {
       console.error('Error creating order:', error);
       Alert.alert('Error', 'Failed to create your order. Please try again.');

@@ -47,17 +47,23 @@ const PaymentModal = ({ visible, onClose, onPaymentSuccess, onPaymentError, orde
       const paymentModeInfo = PaymentService.getPaymentModeInfo();
       console.log(`${paymentModeInfo.icon} Payment Mode: ${paymentModeInfo.mode}`);
       console.log(`📋 Payment Description: ${paymentModeInfo.description}`);
-      
+
+      // Debug: Log Stripe key from env
+      const stripeKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || (globalThis?.expo?.extra?.stripePublishableKey);
+      console.log('🔑 Stripe Publishable Key:', stripeKey);
+
       initializeStripeService();
     }
   }, [visible]);
 
   const initializeStripeService = async () => {
     try {
+      console.log('⏳ Initializing Stripe...');
       await initializeStripe();
       setStripeInitialized(true);
+      console.log('✅ Stripe initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize Stripe:', error);
+      console.error('❌ Failed to initialize Stripe:', error);
       Alert.alert('Payment Error', 'Failed to initialize payment system. Please try again.');
     }
   };
