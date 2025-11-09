@@ -8,3 +8,4 @@ config.resolver.platforms = ['native', 'ios', 'android', 'web'];
 
 module.exports = config;
 
+
