@@ -79,9 +79,11 @@ export const UserProvider = ({ children }) => {
     setUserLocation,
   };
 
+  // Ensure loading is always a boolean
+  const safeLoading = typeof loading === 'string' ? loading === 'true' : !!loading;
   return (
     <UserContext.Provider value={value}>
-      {loading ? (
+      {safeLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#34A853" />
         </View>

@@ -5,12 +5,12 @@
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo/qt_logo_vide.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "quicktrash",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/logo/qt_logo_vide.png",
       "resizeMode": "contain",
       "backgroundColor": "#34A853"
     },
@@ -35,7 +35,7 @@
       "edgeToEdgeEnabled": true,
       "package": "com.quicktrash.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/logo/qt_logo_vide.png",
         "backgroundColor": "#34A853"
       },
       "permissions": [
@@ -55,28 +55,15 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/logo/qt_logo_vide.png"
     },
     "plugins": [
       "expo-location",
       "expo-image-picker",
       "@react-native-firebase/crashlytics",
       "expo-notifications",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "compileSdkVersion": 34,
-            "targetSdkVersion": 34,
-            "buildToolsVersion": "34.0.0"
-          },
-          "ios": {
-            "deploymentTarget": "15.1",
-            "useFrameworks": "static"
-          }
-        }
-      ],
-      "expo-asset"
+      "expo-asset",
+      "expo-maps"
     ],
     "extra": {
       "eas": {

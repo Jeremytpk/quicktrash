@@ -24,6 +24,8 @@ const { width } = Dimensions.get('window');
 const menuWidth = 320;
 
 const SideMenu = ({ visible, onClose }) => {
+  // Ensure 'visible' is always a boolean
+  const safeVisible = typeof visible === 'string' ? visible === 'true' : !!visible;
   const navigation = useNavigation();
   const { user, userRole, setUserRole } = useUser();
 
@@ -80,11 +82,11 @@ const SideMenu = ({ visible, onClose }) => {
     }
   };
 
-  const handleNavigation = (JobMonitoring) => {
+  const handleNavigation = (screen) => {
     handleClose(); // Use animated close
     // A slight delay ensures the animation is smooth before navigating
     setTimeout(() => {
-        navigation.navigate(Analytics);
+      navigation.navigate(screen);
     }, 150);
   };
 
@@ -196,7 +198,7 @@ const SideMenu = ({ visible, onClose }) => {
 
   return (
     <Modal
-      visible={visible}
+      visible={safeVisible}
       transparent={true}
       animationType="none" // We use our custom animations now
       onRequestClose={handleClose}

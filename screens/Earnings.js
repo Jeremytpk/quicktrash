@@ -1,4 +1,10 @@
 import React, { useState } from 'react';
+import { useCallback } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
+import { useEffect } from 'react';
+import { useUser } from '../contexts/UserContext';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
 import {
   View,
   Text,
@@ -6,99 +12,201 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  Platform,
+  TextInput,
+  Alert, // Imported Alert for handleWithdraw
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
+import { useNavigation } from '@react-navigation/native'; // Added useNavigation import
 
 const { width } = Dimensions.get('window');
 
 const Earnings = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('week'); // week, month, year
-  
-  const earningsData = {
-    week: {
-      total: 485.50,
-      jobs: 12,
-      average: 40.46,
-      trend: '+12%',
-      breakdown: [
-        { day: 'Mon', amount: 95.50, jobs: 3 },
-        { day: 'Tue', amount: 67.25, jobs: 2 },
-        { day: 'Wed', amount: 0, jobs: 0 },
-        { day: 'Thu', amount: 123.75, jobs: 4 },
-        { day: 'Fri', amount: 88.00, jobs: 2 },
-        { day: 'Sat', amount: 111.00, jobs: 1 },
-        { day: 'Sun', amount: 0, jobs: 0 },
-      ]
-    },
-    month: {
-      total: 2150.75,
-      jobs: 52,
-      average: 41.36,
-      trend: '+8%',
-      breakdown: [
-        { week: 'Week 1', amount: 485.50, jobs: 12 },
-        { week: 'Week 2', amount: 567.25, jobs: 14 },
-        { week: 'Week 3', amount: 523.00, jobs: 13 },
-        { week: 'Week 4', amount: 575.00, jobs: 13 },
-      ]
-    },
-    year: {
-      total: 25800.00,
-      jobs: 620,
-      average: 41.61,
-      trend: '+15%',
-      breakdown: [
-        { month: 'Jan', amount: 2150.75, jobs: 52 },
-        { month: 'Feb', amount: 1980.50, jobs: 48 },
-        { month: 'Mar', amount: 2340.25, jobs: 58 },
-        { month: 'Apr', amount: 2210.00, jobs: 54 },
-        { month: 'May', amount: 2450.75, jobs: 61 },
-        { month: 'Jun', amount: 2180.25, jobs: 53 },
-        { month: 'Jul', amount: 2520.50, jobs: 63 },
-        { month: 'Aug', amount: 2380.00, jobs: 59 },
-        { month: 'Sep', amount: 2190.75, jobs: 54 },
-        { month: 'Oct', amount: 2250.50, jobs: 56 },
-        { month: 'Nov', amount: 2065.00, jobs: 51 },
-        { month: 'Dec', amount: 2070.00, jobs: 51 },
-      ]
-    }
+  const { user } = useUser();
+  const navigation = useNavigation(); // Hook for navigation
+  const [earningsData, setEarningsData] = useState({
+    week: { total: 0, jobs: 0, average: 0, trend: '', breakdown: [] },
+    month: { total: 0, jobs: 0, average: 0, trend: '', breakdown: [] },
+    year: { total: 0, jobs: 0, average: 0, trend: '', breakdown: [] },
+  });
+  const [recentPayouts, setRecentPayouts] = useState([]);
+  const [paymentInfo, setPaymentInfo] = useState({ method: '', account: '', schedule: '' });
+  const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState(0);
+
+  // Withdraw handler (Moved here, outside the return block)
+  const handleWithdraw = () => {
+  // Calculate total available from completed jobs (same as Recent Payouts)
+  const totalAvailable = recentPayouts.reduce((sum, payout) => sum + (typeof payout.amount === 'number' ? payout.amount : 0), 0);
+  setWithdrawAmount(totalAvailable);
+  setWithdrawModalVisible(true);
   };
+
+  useEffect(() => {
+    if (!user) return;
+    
+    // --- 1. Fetch Recent Payouts and calculate earnings from jobs's contractorPayout field ---
+    const jobsRef = collection(db, 'jobs');
+    const q = query(jobsRef, where('contractorId', '==', user.uid), where('status', '==', 'completed'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const jobs = [];
+      const payouts = [];
+      let totalEarned = 0;
+      snapshot.forEach(doc => {
+  const job = doc.data();
+  const completedAt = job.completedAt?.toDate ? job.completedAt.toDate() : new Date(job.completedAt);
+  const payout = job.pricing?.contractorPayout || 0;
+        jobs.push(job);
+        totalEarned += payout;
+        payouts.push({
+          id: doc.id,
+          date: completedAt,
+          amount: payout,
+          jobs: 1,
+          status: 'completed',
+          period: completedAt.toLocaleDateString(),
+        });
+      });
+
+      payouts.sort((a, b) => b.date - a.date);
+      setRecentPayouts(payouts.slice(0, 10));
+
+      // --- 2. Calculate week, month, year earnings ---
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      startOfWeek.setHours(0,0,0,0);
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+      let weekTotal = 0, weekJobs = 0, weekBreakdown = Array(7).fill({ amount: 0, jobs: 0 });
+      let monthTotal = 0, monthJobs = 0, monthBreakdown = [];
+      let yearTotal = 0, yearJobs = 0, yearBreakdown = Array(12).fill({ amount: 0, jobs: 0 });
+
+      jobs.forEach(job => {
+  const completedAt = job.completedAt?.toDate ? job.completedAt.toDate() : new Date(job.completedAt);
+  const payout = job.pricing?.contractorPayout || 0;
+
+        // Week
+        if (completedAt >= startOfWeek) {
+          weekTotal += payout;
+          weekJobs++;
+          const dayIdx = completedAt.getDay();
+          weekBreakdown[dayIdx] = {
+            amount: (weekBreakdown[dayIdx]?.amount || 0) + payout,
+            jobs: (weekBreakdown[dayIdx]?.jobs || 0) + 1
+          };
+        }
+        // Month
+        if (completedAt >= startOfMonth) {
+          monthTotal += payout;
+          monthJobs++;
+          const weekIdx = Math.floor((completedAt.getDate() - 1) / 7);
+          if (!monthBreakdown[weekIdx]) monthBreakdown[weekIdx] = { amount: 0, jobs: 0, week: `Week ${weekIdx+1}` };
+          monthBreakdown[weekIdx].amount += payout;
+          monthBreakdown[weekIdx].jobs += 1;
+        }
+        // Year
+        if (completedAt >= startOfYear) {
+          yearTotal += payout;
+          yearJobs++;
+          const monthIdx = completedAt.getMonth();
+          yearBreakdown[monthIdx] = {
+            amount: (yearBreakdown[monthIdx]?.amount || 0) + payout,
+            jobs: (yearBreakdown[monthIdx]?.jobs || 0) + 1,
+            month: completedAt.toLocaleString('default', { month: 'short' })
+          };
+        }
+      });
+
+      weekBreakdown = weekBreakdown.map((item, idx) => ({ ...item, day: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][idx] }));
+      yearBreakdown = yearBreakdown.map((item, idx) => ({ ...item, month: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][idx] }));
+
+      setEarningsData({
+        week: {
+          total: weekTotal,
+          jobs: weekJobs,
+          average: weekJobs ? weekTotal / weekJobs : 0,
+          trend: '',
+          breakdown: weekBreakdown
+        },
+        month: {
+          total: monthTotal,
+          jobs: monthJobs,
+          average: monthJobs ? monthTotal / monthJobs : 0,
+          trend: '',
+          breakdown: monthBreakdown
+        },
+        year: {
+          total: yearTotal,
+          jobs: yearJobs,
+          average: yearJobs ? yearTotal / yearJobs : 0,
+          trend: '',
+          breakdown: yearBreakdown
+        }
+      });
+    });
+
+    // --- 3. Fetch Payment Information from users collection ---
+    const fetchPaymentInfo = async () => {
+      if (!user) return;
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          let method = 'Bank Account';
+          let account = '';
+          // Prefer payoutMethods if available
+          if (Array.isArray(data.payoutMethods) && data.payoutMethods.length > 0) {
+            const defaultPayout = data.payoutMethods.find(pm => pm.isDefault) || data.payoutMethods[0];
+            if (defaultPayout.type === 'card') {
+              method = `${defaultPayout.brand?.toUpperCase() || 'CARD'} ••••${defaultPayout.last4 || ''}`;
+              account = defaultPayout.last4 ? `••••${defaultPayout.last4}` : '';
+            } else if (defaultPayout.type === 'bank') {
+              method = 'Bank Account';
+              account = defaultPayout.accountNumber ? `••••${defaultPayout.accountNumber}` : '';
+            }
+          } else if (Array.isArray(data.paymentMethods) && data.paymentMethods.length > 0) {
+            const defaultCard = data.paymentMethods.find(pm => pm.isDefault) || data.paymentMethods[0];
+            if (defaultCard.type === 'card') {
+              // Always show last4 of default card in Bank Account field
+              method = 'Bank Account';
+              account = defaultCard.last4 ? `••••${defaultCard.last4}` : '';
+            }
+          } else if (data.contractorData?.bankAccount) {
+            method = 'Bank Account';
+            account = data.contractorData.bankAccount.accountNumber ? `••••${data.contractorData.bankAccount.accountNumber}` : '';
+          }
+          setPaymentInfo({
+            method,
+            account,
+            schedule: data.paymentSchedule || 'Payments are processed weekly on Mondays for the previous week\'s earnings.'
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching payment info:", error);
+      }
+    };
+    
+    fetchPaymentInfo();
+
+    // --- Cleanup Function ---
+    // Returns a function to unsubscribe from the Firestore listener when the component unmounts
+    return () => unsubscribe();
+  }, [user]); // Run effect only when the user object changes or is first available
+  
 
   const currentData = earningsData[selectedPeriod];
 
-  const recentPayouts = [
-    {
-      id: '1',
-      date: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      amount: 125.50,
-      jobs: 3,
-      status: 'completed',
-      period: 'Jan 8-14, 2025'
-    },
-    {
-      id: '2',
-      date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-      amount: 98.75,
-      jobs: 2,
-      status: 'completed',
-      period: 'Jan 1-7, 2025'
-    },
-    {
-      id: '3',
-      date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-      amount: 156.25,
-      jobs: 4,
-      status: 'completed',
-      period: 'Dec 25-31, 2024'
-    },
-  ];
 
   const getBarHeight = (amount, maxAmount) => {
     return Math.max((amount / maxAmount) * 120, 4);
   };
 
-  const maxAmount = Math.max(...currentData.breakdown.map(item => item.amount));
+  const maxAmount = Math.max(1, ...currentData.breakdown.map(item => item.amount));
 
   const renderPeriodButton = (period, label) => (
     <TouchableOpacity
@@ -119,10 +227,11 @@ const Earnings = () => {
 
   const renderBarChart = () => (
     <View style={styles.chartContainer}>
-      <View style={styles.chart}>
+      <ScrollView horizontal contentContainerStyle={styles.chart} showsHorizontalScrollIndicator={false}>
         {currentData.breakdown.map((item, index) => {
           const barHeight = getBarHeight(item.amount, maxAmount);
-          const label = item.day || item.week || item.month;
+          // Use a robust way to get the label: day, week, or month
+          const label = item.day || item.month || item.week; 
           
           return (
             <View key={index} style={styles.barContainer}>
@@ -142,22 +251,81 @@ const Earnings = () => {
             </View>
           );
         })}
-      </View>
+      </ScrollView>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <SharedHeader 
-        title="Earnings" 
-        showBackButton 
-        rightComponent={
-          <TouchableOpacity style={styles.downloadButton}>
-            <Ionicons name="download-outline" size={20} color="#6B7280" />
-            <Text style={styles.downloadText}>Export</Text>
-          </TouchableOpacity>
-        }
-      />
+      {/* Withdraw Modal */}
+      {withdrawModalVisible && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Withdraw Earnings</Text>
+            <Text style={styles.modalLabel}>Total Available:</Text>
+            <Text style={{fontWeight: 'bold', fontSize: 28, color: '#222', marginBottom: 16}}>
+              ${recentPayouts.reduce((sum, payout) => sum + (typeof payout.amount === 'number' ? payout.amount : 0), 0).toFixed(2)}
+            </Text>
+            <Text style={styles.modalLabel}>Payout will be sent to: {paymentInfo.method} {paymentInfo.account}</Text>
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity style={styles.modalCancelButton} onPress={() => setWithdrawModalVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirmButton}
+                onPress={async () => {
+                  setWithdrawModalVisible(false);
+                  try {
+                    // Deduct the full available amount from contractorPayouts in jobs
+                    let remaining = recentPayouts.reduce((sum, payout) => sum + (typeof payout.amount === 'number' ? payout.amount : 0), 0);
+                    for (const payout of recentPayouts) {
+                      if (remaining <= 0) break;
+                      const jobId = payout.id;
+                      const currentPayout = payout.amount;
+                      const deduct = Math.min(currentPayout, remaining);
+                      await import('firebase/firestore').then(({ updateDoc, doc }) => {
+                        updateDoc(doc(db, 'jobs', jobId), {
+                          'pricing.contractorPayout': currentPayout - deduct
+                        });
+                      });
+                      remaining -= deduct;
+                    }
+                    // Call backend API to trigger Stripe payout
+                    const res = await fetch('https://us-central1-quicktrash-1cdff.cloudfunctions.net/api/contractor-payout', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ userId: user.uid, amount: recentPayouts.reduce((sum, payout) => sum + (typeof payout.amount === 'number' ? payout.amount : 0), 0) })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      Alert.alert('Success', 'Withdrawal initiated!');
+                      // Refresh payouts after withdrawal
+                      // Re-fetch recentPayouts from Firestore
+                      const jobsQuery = query(collection(db, 'jobs'), where('contractorId', '==', user.uid));
+                      onSnapshot(jobsQuery, (snapshot) => {
+                        const payouts = [];
+                        snapshot.forEach(docSnap => {
+                          const job = docSnap.data();
+                          const payout = job?.pricing?.contractorPayout || 0;
+                          payouts.push({ id: docSnap.id, amount: payout });
+                        });
+                        setRecentPayouts(payouts);
+                      });
+                    } else {
+                      Alert.alert('Error', data.message || 'Withdrawal failed.');
+                    }
+                  } catch (err) {
+                    Alert.alert('Error', err.message || 'Withdrawal failed.');
+                  }
+                }}
+                disabled={recentPayouts.reduce((sum, payout) => sum + (typeof payout.amount === 'number' ? payout.amount : 0), 0) <= 0}
+              >
+                <Text style={styles.modalConfirmText}>Withdraw</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Period Selector */}
@@ -173,11 +341,12 @@ const Earnings = () => {
         <View style={styles.section}>
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
-              <Text style={styles.statValue}>${currentData.total.toLocaleString()}</Text>
+              <Text style={styles.statValue}>${currentData.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
               <Text style={styles.statLabel}>Total Earnings</Text>
               <View style={styles.trendContainer}>
+                {/* Placeholder trend icon, replace logic with actual trend calculation */}
                 <Ionicons name="trending-up" size={14} color="#34A853" />
-                <Text style={styles.trendText}>{currentData.trend} vs last {selectedPeriod}</Text>
+                <Text style={styles.trendText}>{currentData.trend || 'N/A'} vs last {selectedPeriod}</Text>
               </View>
             </View>
 
@@ -209,9 +378,8 @@ const Earnings = () => {
                 <View style={styles.payoutInfo}>
                   <Text style={styles.payoutAmount}>${payout.amount.toFixed(2)}</Text>
                   <Text style={styles.payoutPeriod}>{payout.period}</Text>
-                  <Text style={styles.payoutJobs}>{payout.jobs} jobs completed</Text>
+                  <Text style={styles.payoutJobs}>{payout.jobs} job{payout.jobs > 1 ? 's' : ''} completed</Text>
                 </View>
-                
                 <View style={styles.payoutStatus}>
                   <View style={styles.statusBadge}>
                     <Text style={styles.statusText}>Paid</Text>
@@ -239,18 +407,22 @@ const Earnings = () => {
                 <Ionicons name="card" size={20} color="#34A853" />
               </View>
               <View style={styles.paymentDetails}>
-                <Text style={styles.paymentMethod}>Bank Account</Text>
-                <Text style={styles.paymentAccount}>****1234</Text>
+                <Text style={styles.paymentMethod}>{paymentInfo.method}</Text>
+                <Text style={styles.paymentAccount}>{paymentInfo.account}</Text>
               </View>
-              <TouchableOpacity>
-                <Text style={styles.changeText}>Change</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity onPress={() => navigation.navigate('PaymentMethods')}>
+                  <Text style={styles.changeText}>Change</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.withdrawButton} onPress={handleWithdraw}>
+                  <Text style={styles.withdrawText}>Withdraw</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            
             <View style={styles.paymentSchedule}>
               <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
               <Text style={styles.scheduleText}>
-                Payments are processed weekly on Mondays for the previous week's earnings.
+                {paymentInfo.schedule}
               </Text>
             </View>
           </View>
@@ -279,9 +451,113 @@ const Earnings = () => {
 };
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(31,41,55,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  modalContainer: {
+    width: '85%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 16,
+  },
+  modalLabel: {
+    fontSize: 16,
+    color: '#374151',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  inputPrefix: {
+    fontSize: 18,
+    color: '#059669',
+    fontWeight: '700',
+    marginRight: 4,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 18,
+    width: 120,
+    textAlign: 'center',
+    color: '#1F2937',
+    backgroundColor: '#F9FAFB',
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 16,
+  },
+  modalCancelButton: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    marginRight: 8,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: '#6B7280',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  modalConfirmButton: {
+    flex: 1,
+    backgroundColor: '#34A853',
+    borderRadius: 8,
+    paddingVertical: 12,
+    marginLeft: 8,
+    alignItems: 'center',
+  },
+  modalConfirmText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  withdrawButton: {
+    marginLeft: 12,
+    backgroundColor: '#34A853',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  withdrawText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  // --- Start of existing styles ---
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: Platform.OS === 'android' ? 25 : 20,
+    paddingBottom: Platform.OS === 'android' ? 45 : 2,
   },
   downloadButton: {
     flexDirection: 'row',
@@ -404,6 +680,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+    // Add maxHeight if the chart grows too large vertically
   },
   chart: {
     flexDirection: 'row',
@@ -413,7 +690,8 @@ const styles = StyleSheet.create({
   },
   barContainer: {
     alignItems: 'center',
-    flex: 1,
+    width: 60, // Fixed width for each bar for better horizontal scrolling
+    marginHorizontal: 5,
   },
   barWrapper: {
     height: 120,
@@ -435,11 +713,13 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontWeight: '600',
     marginBottom: 4,
+    textAlign: 'center',
   },
   barAmount: {
     fontSize: 10,
     color: '#374151',
     fontWeight: '500',
+    textAlign: 'center',
   },
   payoutCard: {
     backgroundColor: '#FFFFFF',

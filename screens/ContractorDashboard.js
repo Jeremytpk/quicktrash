@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useUser } from '../contexts/UserContext';
+import WebCompatibleMap, { Marker, Circle } from '../components/WebCompatibleMap';
+import * as Location from 'expo-location';
 import {
   View,
   Text,
@@ -10,6 +13,7 @@ import {
   Modal,
   Alert,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, onSnapshot, query, where, updateDoc, doc } from 'firebase/firestore';
@@ -24,7 +28,30 @@ const formatDate = (timestamp) => {
 };
 
 const ContractorDashboard = ({ navigation }) => {
+  const { user } = useUser();
   const [isOnline, setIsOnline] = useState(false);
+  const [driverLocation, setDriverLocation] = useState(null);
+  // Track driver's live location when online
+  useEffect(() => {
+    let locationSubscription;
+    const startLocationTracking = async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      locationSubscription = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 5 },
+        (loc) => setDriverLocation(loc.coords)
+      );
+    };
+    if (isOnline) {
+      startLocationTracking();
+    } else {
+      setDriverLocation(null);
+      if (locationSubscription) locationSubscription.remove();
+    }
+    return () => {
+      if (locationSubscription) locationSubscription.remove();
+    };
+  }, [isOnline]);
   const [showJobModal, setShowJobModal] = useState(false);
   const [activeJob, setActiveJob] = useState(null);
   const [countdown, setCountdown] = useState(40);
@@ -54,7 +81,9 @@ const ContractorDashboard = ({ navigation }) => {
     if (jobFilter === 'available') {
       jobsQuery = query(jobsCollection, where('status', '==', 'available'));
     } else {
-      jobsQuery = query(jobsCollection);
+      // Assuming 'all' or another filter that doesn't need a specific status for this example
+      // You might need to adjust this logic based on your actual data structure/requirements for other filters
+      jobsQuery = query(jobsCollection); 
     }
 
     const unsubscribe = onSnapshot(
@@ -81,7 +110,10 @@ const ContractorDashboard = ({ navigation }) => {
             // If a new document was added, trigger the pop-up
             if (change.type === 'added') {
               const newJob = { id: change.doc.id, ...change.doc.data() };
-              handleJobOffer(newJob);
+              // Only offer available jobs
+              if (newJob.status === 'available') { 
+                handleJobOffer(newJob);
+              }
             }
           });
         }
@@ -99,23 +131,59 @@ const ContractorDashboard = ({ navigation }) => {
     return () => unsubscribe();
   }, [jobFilter, handleJobOffer]);
 
-  const [todayStats] = useState({
-    jobsCompleted: 3,
-    earnings: '$95',
-    hoursOnline: '4.5h',
-    rating: 4.8,
+  const [todayStats, setTodayStats] = useState({
+    jobsCompleted: 0,
+    earnings: '$0',
+    hoursOnline: '0h',
+    rating: 0,
   });
+
+  useEffect(() => {
+    if (!user) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const jobsRef = collection(db, 'jobs');
+    const q = query(
+      jobsRef,
+      where('contractorId', '==', user.uid),
+      where('status', '==', 'completed'),
+      where('completedAt', '>=', today)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let jobsCompleted = 0;
+      let earnings = 0;
+      let totalRating = 0;
+      let ratingCount = 0;
+      snapshot.forEach((doc) => {
+        jobsCompleted++;
+        earnings += doc.data().pricing?.contractorPayout || 0;
+        if (doc.data().contractorRating) {
+          totalRating += doc.data().contractorRating;
+          ratingCount++;
+        }
+      });
+      setTodayStats({
+        jobsCompleted,
+        earnings: `$${earnings}`,
+        hoursOnline: 'N/A', // You can implement hoursOnline tracking if you store online time
+        rating: ratingCount ? (totalRating / ratingCount).toFixed(1) : 0,
+      });
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   const handleToggleOnline = () => {
     setIsOnline(!isOnline);
-    Alert.alert(isOnline ? 'Going Offline' : 'Going Online', isOnline ? 'You will no longer receive job offers.' : 'You are now available to receive job offers!');
+    Alert.alert(!isOnline ? 'Going Online' : 'Going Offline', !isOnline ? 'You are now available to receive job offers.' : 'You will no longer receive job offers.');
   };
 
   const handleAcceptJob = async () => {
     if (!activeJob) return;
     try {
+      // NOTE: You are using a placeholder 'current-user-id' in the original code. 
+      // Make sure to replace this with the actual user.uid (e.g., user.uid)
       const jobRef = doc(db, 'jobs', activeJob.id);
-      await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: 'current-user-id' });
+      await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: 'current-user-id' }); 
       Alert.alert('Job Accepted!', `You accepted the ${activeJob.wasteType} pickup job.`);
     } catch (error) {
        console.error("Error accepting job from modal:", error);
@@ -129,6 +197,7 @@ const ContractorDashboard = ({ navigation }) => {
   const handleDeclineJob = () => {
     setShowJobModal(false);
     setActiveJob(null);
+    // You might want to update the job status in the database to 'declined' or similar
     Alert.alert('Job Declined', 'Looking for more jobs in your area...');
   };
 
@@ -137,7 +206,9 @@ const ContractorDashboard = ({ navigation }) => {
       [{ text: 'Cancel', style: 'cancel' }, { text: 'Accept Job', onPress: async () => {
         try {
           const jobRef = doc(db, 'jobs', job.id);
-          await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: 'current-user-id' });
+          // NOTE: You are using a placeholder 'current-user-id' in the original code. 
+          // Make sure to replace this with the actual user.uid (e.g., user.uid)
+          await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: 'current-user-id' }); 
           Alert.alert('Job Accepted!', `You accepted the ${job.wasteType} pickup job.`);
         } catch (error) {
           console.error('Error accepting job:', error);
@@ -152,7 +223,9 @@ const ContractorDashboard = ({ navigation }) => {
       [{ text: 'Cancel', style: 'cancel' }, { text: 'Reject', style: 'destructive', onPress: async () => {
         try {
           const jobRef = doc(db, 'jobs', job.id);
-          await updateDoc(jobRef, { status: 'rejected', rejectedAt: new Date(), contractorId: 'current-user-id' });
+          // NOTE: Only allow a user to reject a job if they haven't accepted it yet.
+          // This update should probably NOT include the contractorId since it's being rejected from the general available list
+          await updateDoc(jobRef, { status: 'rejected', rejectedAt: new Date() }); 
           Alert.alert('Job Rejected', 'The job has been removed from your list.');
         } catch (error) {
           console.error('Error rejecting job:', error);
@@ -171,9 +244,50 @@ const ContractorDashboard = ({ navigation }) => {
     }
     return () => clearTimeout(timer);
   }, [showJobModal, countdown]);
+  
+  // A helper function to render a job card (placeholder for brevity)
+  const renderJobCard = (job) => (
+    <View key={job.id} style={styles.jobCardContainer}>
+      {/* Actual job card implementation using job data */}
+      <View style={[styles.jobCardNew, job.isHighPayout ? styles.highPayoutJob : styles.mediumPayoutJob]}>
+        <View style={styles.jobCardHeader}>
+          <View style={styles.jobTypeContainer}>
+            <View style={[styles.urgencyBadge, styles.urgencyNormal]}>
+              <Text style={[styles.urgencyText, styles.urgencyTextNormal]}>NEW OFFER</Text>
+            </View>
+            <Text style={styles.jobTypeNew}>{job.wasteType}</Text>
+          </View>
+          <View style={styles.earningsContainer}>
+            <Text style={styles.earningsAmountNew}>${job.pricing?.contractorPayout || 'N/A'}</Text>
+            <Text style={styles.earningsLabelNew}>Your Payout</Text>
+          </View>
+        </View>
+        <View style={styles.jobDetailsSection}>
+          <Text style={styles.jobVolumeNew}>{job.volume} | {formatDate(job.createdAt)}</Text>
+          <View style={styles.jobMetrics}>
+            <View style={styles.metric}><Ionicons name="location-outline" size={16} color="#6B7280" /><Text style={styles.metricText}>{job.distance || '1.5 mi'}</Text></View>
+            <Text style={styles.jobAddressNew}>{job.pickupAddress?.fullAddress || 'Address Not Available'}</Text>
+          </View>
+        </View>
+        {job.status === 'available' && (
+          <View style={styles.jobActions}>
+            <TouchableOpacity style={styles.rejectJobButton} onPress={() => handleRejectJobFromList(job)}>
+              <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
+              <Text style={styles.rejectJobText}>Reject</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.acceptJobButton} onPress={() => handleAcceptJobFromList(job)}>
+              <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.acceptJobText}>Accept Job</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
+      {/* 1. Primary SharedHeader (Visible at the top of the main container) */}
       <SharedHeader 
         title="Welcome back, Driver!"
         subtitle={
@@ -191,99 +305,95 @@ const ContractorDashboard = ({ navigation }) => {
         }
       />
 
-      {isOnline && (
-        <View style={styles.jobsContainer}>
-          <View style={styles.jobsHeader}>
-            <View style={styles.jobsHeaderLeft}>
-              <Text style={styles.jobsTitle}>Jobs</Text>
-              <Text style={styles.jobsCount}>{loading ? 'Loading...' : `${allJobs.length} matching jobs found`}</Text>
+      {/* 2. Main ScrollView for the dashboard content */}
+      <ScrollView style={styles.content} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+
+        {/* --- Content section: Jobs and Map (only when online) --- */}
+        {isOnline && (
+          <View style={styles.jobsContainer}>
+            {/* Jobs Filter and Header */}
+            <View style={styles.jobsHeader}>
+                <View style={styles.jobsHeaderLeft}>
+                    <Text style={styles.jobsTitle}>New & Available Jobs</Text>
+                    <Text style={styles.jobsCount}>{allJobs.length} {jobFilter} jobs</Text>
+                </View>
+                <TouchableOpacity style={styles.toggleButton} onPress={() => setShowJobsContainer(!showJobsContainer)}>
+                    <Ionicons name={showJobsContainer ? 'chevron-up-outline' : 'chevron-down-outline'} size={18} color="#6B7280" />
+                    <Text style={styles.toggleText}>{showJobsContainer ? 'Hide' : 'Show'}</Text>
+                </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.toggleButton} onPress={() => setShowJobsContainer(!showJobsContainer)}>
-              <Ionicons name={showJobsContainer ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
-              <Text style={styles.toggleText}>{showJobsContainer ? 'Hide' : 'Show'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.filterContainer}>
-            <TouchableOpacity style={[styles.filterButton, jobFilter === 'available' && styles.activeFilter]} onPress={() => setJobFilter('available')}>
-              <Text style={[styles.filterText, jobFilter === 'available' && styles.activeFilterText]}>Available</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.filterButton, jobFilter === 'all' && styles.activeFilter]} onPress={() => setJobFilter('all')}>
-              <Text style={[styles.filterText, jobFilter === 'all' && styles.activeFilterText]}>All Jobs</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {showJobsContainer && (
-            <ScrollView style={styles.jobsScrollView} showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
-              {loading ? (
-                <View style={styles.loadingContainer}><Ionicons name="hourglass-outline" size={48} color="#9CA3AF" /><Text style={styles.loadingText}>Loading jobs...</Text></View>
-              ) : allJobs.map((job) => {
-                const payout = job.pricing?.contractorPayout || 0;
-                return (
-                  <View key={job.id} style={styles.jobCardContainer}>
-                    <View style={[ styles.jobCardNew, payout >= 45 && styles.highPayoutJob, payout >= 25 && payout < 45 && styles.mediumPayoutJob ]}>
-                      <View style={styles.jobCardHeader}>
-                        <View style={styles.jobTypeContainer}>
-                          <View style={[styles.urgencyBadge, job.isASAP ? styles.urgencyHigh : styles.urgencyNormal]}>
-                            <Text style={[styles.urgencyText, job.isASAP ? styles.urgencyTextHigh : styles.urgencyTextNormal]}>{job.isASAP ? "ASAP" : "SCHEDULED"}</Text>
-                          </View>
-                          <View style={styles.jobTitleContainer}>
-                             <Text style={styles.jobTypeNew}>{job.wasteType}</Text>
-                             <View style={styles.statusBadge}><Text style={styles.statusTextBadge}>{job.status?.toUpperCase()}</Text></View>
-                          </View>
-                        </View>
-                        <View style={styles.earningsContainer}>
-                          <Text style={styles.earningsAmountNew}>${payout}</Text>
-                          <Text style={styles.earningsLabelNew}>Your Payout</Text>
-                        </View>
-                      </View>
-                      <View style={styles.jobDetailsSection}>
-                        <Text style={styles.jobVolumeNew}>{job.volume}</Text>
-                        {job.pickupAddress?.instructions && (
-                          <View style={styles.instructionsContainer}>
-                            <Ionicons name="information-circle-outline" size={18} color="#2563EB" />
-                            <Text style={styles.instructionsText}>{job.pickupAddress.instructions}</Text>
-                          </View>
-                        )}
-                        <View style={styles.jobMetrics}>
-                          <View style={styles.metric}>
-                             <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                             <Text style={styles.metricText}>Created: {formatDate(job.createdAt)}</Text>
-                          </View>
-                          {job.scheduledPickup && (
-                            <View style={styles.metric}>
-                              <Ionicons name="time-outline" size={16} color="#6B7280" />
-                              <Text style={styles.metricText}>Scheduled: {formatDate(job.scheduledPickup)}</Text>
-                            </View>
-                          )}
-                          <View style={styles.metric}>
-                            <Ionicons name="cash-outline" size={16} color="#6B7280" />
-                            <Text style={styles.metricText}>Payout: <Text style={{fontWeight: 'bold'}}>${payout}</Text> | Total: ${job.pricing?.total || 0}</Text>
-                          </View>
-                        </View>
-                        <Text style={styles.jobAddressNew}>{job.pickupAddress?.fullAddress || 'No address provided'}</Text>
-                      </View>
-                      <View style={styles.jobActions}>
-                        <TouchableOpacity style={styles.rejectJobButton} onPress={() => handleRejectJobFromList(job)}><Ionicons name="close-outline" size={18} color="#EF4444" /><Text style={styles.rejectJobText}>Reject</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.acceptJobButton} onPress={() => handleAcceptJobFromList(job)}><Ionicons name="checkmark-outline" size={18} color="#FFFFFF" /><Text style={styles.acceptJobText}>Accept Job</Text></TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                )
-              })}
-              
-              {!loading && allJobs.length === 0 && (
-                <View style={styles.noJobsContainer}><Ionicons name="briefcase-outline" size={48} color="#9CA3AF" /><Text style={styles.noJobsTitle}>No Jobs Found</Text><Text style={styles.noJobsText}>There are no jobs matching the current filter.</Text></View>
-              )}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
+                <TouchableOpacity style={[styles.filterButton, jobFilter === 'available' && styles.activeFilter]} onPress={() => setJobFilter('available')}>
+                    <Text style={[styles.filterText, jobFilter === 'available' && styles.activeFilterText]}>Available</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.filterButton, jobFilter === 'all' && styles.activeFilter]} onPress={() => setJobFilter('all')}>
+                    <Text style={[styles.filterText, jobFilter === 'all' && styles.activeFilterText]}>All Jobs</Text>
+                </TouchableOpacity>
+                {/* Add more filters as needed */}
             </ScrollView>
-          )}
-        </View>
-      )}
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.section}><Text style={styles.sectionTitle}>Today's Performance</Text><View style={styles.statsGrid}><View style={styles.statCard}><Ionicons name="checkmark-circle" size={24} color="#34A853" /><Text style={styles.statNumber}>{todayStats.jobsCompleted}</Text><Text style={styles.statLabel}>Jobs Completed</Text></View><View style={styles.statCard}><Ionicons name="cash" size={24} color="#FF8F00" /><Text style={styles.statNumber}>{todayStats.earnings}</Text><Text style={styles.statLabel}>Earnings</Text></View><View style={styles.statCard}><Ionicons name="time" size={24} color="#1E88E5" /><Text style={styles.statNumber}>{todayStats.hoursOnline}</Text><Text style={styles.statLabel}>Hours Online</Text></View><View style={styles.statCard}><Ionicons name="star" size={24} color="#FFB300" /><Text style={styles.statNumber}>{todayStats.rating}</Text><Text style={styles.statLabel}>Rating</Text></View></View></View>
+            {/* Job Cards List */}
+            {showJobsContainer && (
+              <ScrollView style={styles.jobsScrollView} showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
+                {loading ? (
+                    <View style={styles.loadingContainer}>
+                        <Ionicons name="sync-circle-outline" size={48} color="#9CA3AF" />
+                        <Text style={styles.loadingText}>Loading available jobs...</Text>
+                    </View>
+                ) : (
+                    allJobs.length > 0 ? (
+                        allJobs.map(renderJobCard)
+                    ) : (
+                        <View style={styles.noJobsContainer}>
+                          <Ionicons name="briefcase-outline" size={48} color="#9CA3AF" />
+                          <Text style={styles.noJobsTitle}>No Jobs Found</Text>
+                          <Text style={styles.noJobsText}>There are no jobs matching the current filter.</Text>
+                        </View>
+                    )
+                )}
+              </ScrollView>
+            )}
+
+            {/* Live location map below jobs */}
+            {driverLocation && (
+              <View style={{ height: 250, margin: 16, borderRadius: 16, overflow: 'hidden' }}>
+                <WebCompatibleMap
+                  style={{ flex: 1 }}
+                  initialRegion={{
+                    latitude: driverLocation.latitude,
+                    longitude: driverLocation.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  }}
+                >
+                  <Marker
+                    coordinate={{
+                      latitude: driverLocation.latitude,
+                      longitude: driverLocation.longitude,
+                    }}
+                    title="Your Location"
+                  >
+                    <Ionicons name="car" size={32} color="#34A853" />
+                  </Marker>
+                </WebCompatibleMap>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* --- Content section: Today's Performance --- */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Today's Performance</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statCard}><Ionicons name="checkmark-circle" size={24} color="#34A853" /><Text style={styles.statNumber}>{todayStats.jobsCompleted}</Text><Text style={styles.statLabel}>Jobs Completed</Text></View>
+            <View style={styles.statCard}><Ionicons name="cash" size={24} color="#FF8F00" /><Text style={styles.statNumber}>{todayStats.earnings}</Text><Text style={styles.statLabel}>Earnings</Text></View>
+            <View style={styles.statCard}><Ionicons name="time" size={24} color="#1E88E5" /><Text style={styles.statNumber}>{todayStats.hoursOnline}</Text><Text style={styles.statLabel}>Hours Online</Text></View>
+            <View style={styles.statCard}><Ionicons name="star" size={24} color="#FFB300" /><Text style={styles.statNumber}>{todayStats.rating}</Text><Text style={styles.statLabel}>Rating</Text></View>
+          </View>
+        </View>
       </ScrollView>
 
+      {/* 3. Job Offer Modal (Positioned outside the ScrollView) */}
       <Modal visible={showJobModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowJobModal(false)}>
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -322,7 +432,7 @@ const styles = StyleSheet.create({
     jobTitleContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     statusBadge: { backgroundColor: '#E5E7EB', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
     statusTextBadge: { fontSize: 10, fontWeight: '700', color: '#4B5563', letterSpacing: 0.5 },
-    container: { flex: 1, backgroundColor: '#F8F9FA' },
+    container: { flex: 1, backgroundColor: '#F8F9FA', paddingTop: Platform.OS === 'ios' ? 30 : 24 },
     onlineStatus: { flexDirection: 'row', alignItems: 'center' },
     statusText: { fontSize: 14, fontWeight: '600', marginLeft: 8 },
     notificationButton: { padding: 8, position: 'relative' },

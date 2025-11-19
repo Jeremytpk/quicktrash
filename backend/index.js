@@ -18,6 +18,32 @@ app.use(cors({
 app.use(express.json());
 
 // --- CORE APPLICATION ENDPOINTS ---
+// Delete Stripe account endpoint
+// URL: /api/delete-stripe-account (requires POST)
+app.post('/delete-stripe-account', async (req, res) => {
+  try {
+    const { accountId, userId } = req.body;
+    if (!accountId || !userId) {
+      return res.status(400).json({ success: false, error: 'Missing accountId or userId' });
+    }
+
+    // Delete Stripe account
+    let deletedStripeAccount;
+    try {
+      deletedStripeAccount = await stripe.accounts.del(accountId);
+    } catch (stripeError) {
+      return res.status(500).json({ success: false, error: `Stripe error: ${stripeError.message}` });
+    }
+
+    // Optionally, remove from Firestore (if using admin SDK)
+    // const admin = require('firebase-admin');
+    // await admin.firestore().collection('users').doc(userId).update({ stripeConnectedAccountId: admin.firestore.FieldValue.delete() });
+
+    res.json({ success: true, deletedStripeAccount });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // Health check endpoint
 // URL: /api/health
@@ -98,8 +124,8 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
     // The webhook secret is typically loaded via process.env
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET || functions.config().stripe?.webhook_secret);
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+  console.error('Webhook signature verification failed:', error.message);
+  return res.status(400).send(`Webhook Error: ${error.message}`);
   }
 
   // Handle the event

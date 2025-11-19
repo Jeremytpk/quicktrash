@@ -1,15 +1,58 @@
-const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config(); // Ensure this is present if you use local .env variables
+// Load local .env only when running locally (avoid requiring dotenv in Cloud Functions container)
+try {
+// Trigger a Stripe payout to contractor's account
+// URL: /api/contractor-payout
+app.post('/contractor-payout', async (req, res) => {
+  try {
+    const { userId, amount } = req.body;
+    if (!userId || !amount || amount <= 0) {
+      return res.status(400).json({ error: 'userId and positive amount required' });
+    }
+
+    // Fetch contractor's Stripe account ID from Firestore
+    const userDoc = await admin.firestore().collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const data = userDoc.data();
+    const stripeAccountId = data.stripeConnectedAccountId;
+    if (!stripeAccountId) {
+      return res.status(400).json({ error: 'Contractor does not have a Stripe account' });
+    }
+
+    // Create an instant payout to the contractor's Stripe account (card)
+    // Amount must be in cents
+    // You may want to check for eligible cards and handle errors if not eligible
+    const payout = await stripe.payouts.create({
+      amount: Math.round(amount * 100),
+      currency: 'usd',
+      method: 'instant',
+    }, {
+      stripeAccount: stripeAccountId
+    });
+
+    res.json({ success: true, payout });
+  } catch (error) {
+    console.error('contractor-payout error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+  if (process.env.NODE_ENV !== 'production') {
+    require('dotenv').config(); // Ensure this is present if you use local .env variables
+  }
+} catch (e) {
+  console.log('dotenv not available or failed to load, skipping');
+}
 
 // Initialize Firebase Admin (needed for Firestore access)
 admin.initializeApp();
 
 // Initialize Stripe with secret key from environment or Firebase config
-// NOTE: functions.config() is deprecated but kept for your current stable configuration.
-const stripeSecret = process.env.STRIPE_SECRET_KEY || functions.config().stripe?.secret_key;
+// Use only process.env for Stripe secret (functions.config() is deprecated)
+const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const stripe = require('stripe')(stripeSecret);
 const app = express();
 
@@ -18,6 +61,36 @@ app.use(cors({ origin: true }));
 // We only want JSON parsing for the standard endpoints, not the webhook, so we apply it here globally.
 // NOTE: The webhook handler will use express.raw() to override this for its specific path.
 app.use(express.json());
+
+// Delete Stripe Connected Account
+// URL: /api/delete-stripe-account
+app.post('/delete-stripe-account', async (req, res) => {
+  try {
+    const { accountId, userId } = req.body;
+    if (!accountId) return res.status(400).json({ error: 'accountId required' });
+    // Delete Stripe account
+    let deletedAccount;
+    try {
+      deletedAccount = await stripe.accounts.del(accountId);
+    } catch (stripeError) {
+      console.error('Stripe account deletion error:', stripeError);
+      return res.status(500).json({ error: 'Failed to delete Stripe account', details: String(stripeError) });
+    }
+    // Remove reference from Firestore if userId provided
+    if (userId) {
+      try {
+        await admin.firestore().collection('users').doc(userId).update({ stripeConnectedAccountId: admin.firestore.FieldValue.delete() });
+      } catch (fwError) {
+        console.error('Failed to remove connected account id from Firestore', fwError);
+        // Don't fail the whole request if Firestore update fails
+      }
+    }
+    res.json({ success: true, deletedAccount });
+  } catch (err) {
+    console.error('delete-stripe-account error', err);
+    res.status(500).json({ error: 'delete-stripe-account-failed', details: String(err) });
+  }
+});
 
 // --- HEALTH & DEBUG ---
 
@@ -51,23 +124,79 @@ app.get('/debug-stripe-balance', async (req, res) => {
 });
 
 // --- CONNECTED ACCOUNTS & WITHDRAWAL LOGIC ---
+// Attach payout card to Stripe connected account
+// URL: /api/add-payout-card
+app.all('/api/add-payout-card', async (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, message: 'Method Not Allowed. Use POST.' });
+  }
+  try {
+    const { userId, card } = req.body;
+    if (!userId || !card || !card.number || !card.exp_month || !card.exp_year || !card.cvc) {
+      return res.status(400).json({ success: false, message: 'Missing card details or userId' });
+    }
+    // Fetch contractor's Stripe account ID from Firestore
+    const userDoc = await admin.firestore().collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const data = userDoc.data();
+    const stripeAccountId = data.stripeConnectedAccountId;
+    if (!stripeAccountId) {
+      return res.status(400).json({ success: false, message: 'Contractor does not have a Stripe account' });
+    }
+    // Create a card token using Stripe API
+    const token = await stripe.tokens.create({
+      card: {
+        number: card.number,
+        exp_month: card.exp_month,
+        exp_year: card.exp_year,
+        cvc: card.cvc,
+        name: card.name
+      }
+    });
+    // Attach card as external account to Stripe connected account
+    const externalAccount = await stripe.accounts.createExternalAccount(
+      stripeAccountId,
+      {
+        external_account: token.id
+      }
+    );
+    res.json({ success: true, externalAccount });
+  } catch (error) {
+    console.error('add-payout-card error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // Create Connected Account
 // Jey's Fix: Route is now '/create-connected-account' (removed redundant /api prefix)
 // URL: /api/create-connected-account
+app.get('/create-connected-account', (req, res) => {
+  res.json({ status: 'OK', message: 'Endpoint is live. Use POST for actual account creation.' });
+});
 app.post('/create-connected-account', async (req, res) => {
   try {
     const { email, userId } = req.body;
     if (!email) return res.status(400).json({ error: 'email required' });
 
-    const account = await stripe.accounts.create({ type: 'express', email });
-    const accountLink = await stripe.accountLinks.create({
-      account: account.id,
-      refresh_url: process.env.STRIPE_ONBOARDING_REFRESH_URL || 'https://example.com/refresh',
-      return_url: process.env.STRIPE_ONBOARDING_RETURN_URL || 'https://example.com/return',
-      type: 'account_onboarding',
+    // Create Express account for individual payouts only
+    const account = await stripe.accounts.create({
+      type: 'express',
+      email,
+      business_type: 'individual',
+      capabilities: {
+        transfers: { requested: true },
+        card_payments: { requested: false }, // Not needed for contractors
+      },
+      settings: {
+        payouts: {
+          schedule: { delay_days: 2, interval: 'daily' },
+        },
+      },
     });
 
+    // Save account ID to Firestore
     if (userId) {
       try {
         await admin.firestore().collection('users').doc(userId).set({ stripeConnectedAccountId: account.id }, { merge: true });
@@ -76,10 +205,32 @@ app.post('/create-connected-account', async (req, res) => {
       }
     }
 
-    res.json({ accountId: account.id, onboardingUrl: accountLink.url });
+    // No onboarding link needed; contractors only receive payouts
+    res.json({ accountId: account.id });
   } catch (err) {
     console.error('create-connected-account error', err);
-    res.status(500).json({ error: err.message });
+  res.status(500).json({ error: error.message });
+  }
+});
+
+// Create onboarding link for an existing connected account
+// URL: /api/create-onboarding-link
+app.post('/create-onboarding-link', async (req, res) => {
+  try {
+    const { accountId } = req.body;
+    if (!accountId) return res.status(400).json({ error: 'accountId required' });
+
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: process.env.STRIPE_ONBOARDING_REFRESH_URL || 'https://example.com/refresh',
+      return_url: process.env.STRIPE_ONBOARDING_RETURN_URL || 'https://example.com/return',
+      type: 'account_onboarding',
+    });
+
+    res.json({ onboardingUrl: accountLink.url });
+  } catch (err) {
+    console.error('create-onboarding-link error', err);
+  res.status(500).json({ error: error.message });
   }
 });
 
@@ -118,7 +269,7 @@ app.post('/attach-external-account', async (req, res) => {
     res.json({ externalAccount });
   } catch (err) {
     console.error('attach-external-account error', err);
-    res.status(500).json({ error: err.message });
+  res.status(500).json({ error: error.message });
   }
 });
 
@@ -251,8 +402,8 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+  console.error('Webhook signature verification failed:', error.message);
+  return res.status(400).send(`Webhook Error: ${error.message}`);
   }
 
   // Handle the event
@@ -269,4 +420,12 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
 });
 
 // Export the Express app as a Firebase Function named 'api'
+// Local run support: start Express server if run directly
+if (require.main === module) {
+  const port = process.env.PORT || 5001;
+  app.listen(port, () => {
+    console.log(`Express server running locally on port ${port}`);
+  });
+}
+const functions = require('firebase-functions');
 exports.api = functions.https.onRequest(app);

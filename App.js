@@ -1,7 +1,8 @@
 import React from 'react';
+// The following three imports were missing and are required for your component to work:
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { UserProvider } from './contexts/UserContext';
+import { UserProvider } from './contexts/UserContext'; 
 
 // Screens & Components
 import RoleSelection from './screens/RoleSelection';
@@ -30,6 +31,7 @@ import LocationVerification from './components/LocationVerification';
 
 // Customer screens
 import PaymentMethods from './screens/PaymentMethods';
+import WebViewScreen from './screens/WebViewScreen';
 
 // Contractor screens
 import AvailableJobs from './screens/AvailableJobs';
@@ -37,6 +39,7 @@ import MyJobs from './screens/MyJobs';
 import Earnings from './screens/Earnings';
 import VehicleInfo from './screens/VehicleInfo';
 import SafetyToolkit from './screens/SafetyToolkit';
+import ContractorStripe from './screens/ContractorStripe'; // Standard import
 
 // Employee screens
 import UserManagement from './screens/UserManagement';
@@ -180,8 +183,19 @@ function App() {
             component={PaymentMethods} 
             options={{ headerShown: false }} 
           />
-          
           {/* Contractor Screens */}
+
+          <Stack.Screen
+            name="WebViewScreen"
+            component={WebViewScreen}
+            options={{ title: 'Onboarding', headerTitleAlign: 'center' }}
+          />
+          <Stack.Screen 
+            name="ContractorStripe" 
+            component={ContractorStripe} 
+            options={{ title: 'Payment Account', headerTitleAlign: 'center' }} 
+          />
+
           <Stack.Screen 
             name="AvailableJobs" 
             component={AvailableJobs} 

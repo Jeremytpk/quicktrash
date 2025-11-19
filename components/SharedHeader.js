@@ -22,6 +22,9 @@ const SharedHeader = ({
   backgroundColor = '#FFFFFF',
   titleColor = '#1F2937'
 }) => {
+  // Ensure boolean props are not strings
+  const safeShowBackButton = typeof showBackButton === 'string' ? showBackButton === 'true' : !!showBackButton;
+  const safeShowHomeButton = typeof showHomeButton === 'string' ? showHomeButton === 'true' : !!showHomeButton;
   const navigation = useNavigation();
   const { getHomeDashboard } = useUser();
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
@@ -35,10 +38,10 @@ const SharedHeader = ({
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor }]}>
-      <View style={[styles.container, { backgroundColor }]}>
-        <View style={styles.leftSection}>
-          {showBackButton && (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor }]}> 
+      <View style={[styles.container, { backgroundColor }]}> 
+        <View style={styles.leftSection}> 
+          {safeShowBackButton && (
             <TouchableOpacity 
               style={styles.iconButton} 
               onPress={handleBackPress}
@@ -47,12 +50,12 @@ const SharedHeader = ({
             </TouchableOpacity>
           )}
           
-          <View style={styles.titleContainer}>
+          <View style={styles.titleContainer}> 
             <Text style={[styles.title, { color: titleColor }]}>{title}</Text>
             {subtitle && (
-              <View style={styles.subtitleContainer}>
+              <View style={styles.subtitleContainer}> 
                 {typeof subtitle === 'string' ? (
-                  <Text style={[styles.subtitle, { color: titleColor, opacity: 0.7 }]}>
+                  <Text style={[styles.subtitle, { color: titleColor, opacity: 0.7 }]}> 
                     {subtitle}
                   </Text>
                 ) : (
@@ -63,10 +66,10 @@ const SharedHeader = ({
           </View>
         </View>
 
-        <View style={styles.rightSection}>
+        <View style={styles.rightSection}> 
           {rightComponent}
           
-          {showHomeButton && (
+          {safeShowHomeButton && (
             <TouchableOpacity 
               style={styles.logoHomeButton} 
               onPress={handleLogoPress}

@@ -28,7 +28,7 @@ export default function WithdrawModal({ route, navigation }) {
         const data = await res.json();
         setStripeBalance(data.available);
       } catch (err) {
-        setBalanceError(err.message);
+  setBalanceError(error.message);
       } finally {
         setLoadingBalance(false);
       }

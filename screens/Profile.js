@@ -8,6 +8,7 @@ import {
   Image,
   TextInput,
   Alert,
+  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -292,6 +293,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: Platform.OS === 'android' ? 25 : 20,
+    paddingBottom: Platform.OS === 'android' ? 45 : 2,
   },
   loadingContainer: {
     flex: 1,

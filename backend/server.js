@@ -88,7 +88,7 @@ app.post('/api/create-connected-account', async (req, res) => {
     res.json({ accountId: account.id, onboardingUrl: accountLink.url });
   } catch (err) {
     console.error('Error creating connected account:', err);
-    res.status(500).json({ error: err.message });
+  res.status(500).json({ error: error.message });
   }
 });
 
@@ -110,7 +110,7 @@ app.post('/api/attach-external-account', async (req, res) => {
     res.json({ externalAccount });
   } catch (err) {
     console.error('Error attaching external account:', err);
-    res.status(500).json({ error: err.message });
+  res.status(500).json({ error: error.message });
   }
 });
 
@@ -176,7 +176,7 @@ app.post('/api/withdraw-to-card', async (req, res) => {
     return res.status(400).json({ error: 'No valid payout method found.' });
   } catch (err) {
     console.error('Withdraw endpoint error:', err);
-    res.status(500).json({ error: err.message });
+  res.status(500).json({ error: error.message });
   }
 });
 
@@ -211,8 +211,8 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
-    console.log(`Webhook signature verification failed.`, err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+  console.log(`Webhook signature verification failed.`, error.message);
+  return res.status(400).send(`Webhook Error: ${error.message}`);
   }
 
   // Handle the event

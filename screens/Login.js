@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { KeyboardAvoidingView, Platform } from 'react-native';
 import {
   View,
   Text,
@@ -76,9 +77,13 @@ const Login = ({ navigation, route }) => {
   }
 
   return (
-    <View style={styles.container}>
-      <Image source={QuickTrashLogo} style={styles.logo} /> 
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={40}
+    >
       <Text style={styles.title}>LOGIN</Text>
+      <Image source={QuickTrashLogo} style={styles.logo} /> 
       <Text style={styles.subtitle}>Welcome Back</Text>
       <TextInput
         style={styles.input}
@@ -115,7 +120,7 @@ const Login = ({ navigation, route }) => {
       <TouchableOpacity onPress={() => navigation.navigate('RoleSelection')}>
         <Text style={styles.link}>Don't have an account? Sign Up</Text>
       </TouchableOpacity>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -138,6 +143,7 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: 'bold',
     marginBottom: 10,
+    bottom: 30,
     color: '#333',
   },
   subtitle: {
