@@ -23,6 +23,9 @@ web-build/
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+firebase-debug.log
+yarn-debug.*
+yarn-error.*
 
 # macOS
 .DS_Store
