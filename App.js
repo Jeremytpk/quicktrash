@@ -3,6 +3,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { UserProvider } from './contexts/UserContext'; 
+import { StripeProvider } from '@stripe/stripe-react-native';
 
 // Screens & Components
 import RoleSelection from './screens/RoleSelection';
@@ -28,6 +29,8 @@ import ErrorScreen from './screens/ErrorScreen';
 import LocationDebugScreen from './components/LocationDebugScreen';
 import LocationTestSimple from './components/LocationTestSimple';
 import LocationVerification from './components/LocationVerification';
+import Accounts from './screens/Accounts';
+import AccountDetails from './screens/AccountDetails';
 
 // Customer screens
 import PaymentMethods from './screens/PaymentMethods';
@@ -40,6 +43,7 @@ import Earnings from './screens/Earnings';
 import VehicleInfo from './screens/VehicleInfo';
 import SafetyToolkit from './screens/SafetyToolkit';
 import ContractorStripe from './screens/ContractorStripe'; // Standard import
+import ContractorVerification from './screens/ContractorVerification';
 
 // Employee screens
 import UserManagement from './screens/UserManagement';
@@ -51,11 +55,15 @@ import Analytics from './screens/Analytics';
 // Create the stack navigator
 const Stack = createNativeStackNavigator();
 
+// Stripe publishable key from environment
+const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_stripe_publishable_key_here';
+
 function App() {
   return (
-    <UserProvider>
-      <NavigationContainer>
-        <Stack.Navigator initialRouteName="Transit">
+    <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
+      <UserProvider>
+        <NavigationContainer>
+          <Stack.Navigator initialRouteName="Transit">
           <Stack.Screen 
             name="FirebaseTest" 
             component={FirebaseTest} 
@@ -191,6 +199,11 @@ function App() {
             options={{ title: 'Onboarding', headerTitleAlign: 'center' }}
           />
           <Stack.Screen 
+            name="ContractorVerification" 
+            component={ContractorVerification} 
+            options={{ headerShown: true, title: 'Contractor Verification', headerTitleAlign: 'center' }} 
+          />
+          <Stack.Screen 
             name="ContractorStripe" 
             component={ContractorStripe} 
             options={{ title: 'Payment Account', headerTitleAlign: 'center' }} 
@@ -238,9 +251,20 @@ function App() {
             component={Analytics} 
             options={{ headerShown: false }} 
           />
+          <Stack.Screen 
+            name="Accounts" 
+            component={Accounts} 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="AccountDetails" 
+            component={AccountDetails} 
+            options={{ headerShown: false }} 
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </UserProvider>
+    </StripeProvider>
   );
 }
 

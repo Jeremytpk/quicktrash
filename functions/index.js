@@ -1,47 +1,12 @@
 const admin = require('firebase-admin');
 const express = require('express');
 const cors = require('cors');
-// Load local .env only when running locally (avoid requiring dotenv in Cloud Functions container)
+const functions = require('firebase-functions');
+
+// Load local .env only when running locally
 try {
-// Trigger a Stripe payout to contractor's account
-// URL: /api/contractor-payout
-app.post('/contractor-payout', async (req, res) => {
-  try {
-    const { userId, amount } = req.body;
-    if (!userId || !amount || amount <= 0) {
-      return res.status(400).json({ error: 'userId and positive amount required' });
-    }
-
-    // Fetch contractor's Stripe account ID from Firestore
-    const userDoc = await admin.firestore().collection('users').doc(userId).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    const data = userDoc.data();
-    const stripeAccountId = data.stripeConnectedAccountId;
-    if (!stripeAccountId) {
-      return res.status(400).json({ error: 'Contractor does not have a Stripe account' });
-    }
-
-    // Create an instant payout to the contractor's Stripe account (card)
-    // Amount must be in cents
-    // You may want to check for eligible cards and handle errors if not eligible
-    const payout = await stripe.payouts.create({
-      amount: Math.round(amount * 100),
-      currency: 'usd',
-      method: 'instant',
-    }, {
-      stripeAccount: stripeAccountId
-    });
-
-    res.json({ success: true, payout });
-  } catch (error) {
-    console.error('contractor-payout error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
   if (process.env.NODE_ENV !== 'production') {
-    require('dotenv').config(); // Ensure this is present if you use local .env variables
+    require('dotenv').config();
   }
 } catch (e) {
   console.log('dotenv not available or failed to load, skipping');
@@ -50,9 +15,12 @@ app.post('/contractor-payout', async (req, res) => {
 // Initialize Firebase Admin (needed for Firestore access)
 admin.initializeApp();
 
-// Initialize Stripe with secret key from environment or Firebase config
-// Use only process.env for Stripe secret (functions.config() is deprecated)
+// Initialize Stripe with secret key from environment variables
+// Set STRIPE_SECRET_KEY in your .env file or Firebase environment config
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
+if (!stripeSecret) {
+  console.warn('WARNING: No Stripe secret key found in environment. Stripe calls will fail until you set STRIPE_SECRET_KEY.');
+}
 const stripe = require('stripe')(stripeSecret);
 const app = express();
 
@@ -123,6 +91,185 @@ app.get('/debug-stripe-balance', async (req, res) => {
   }
 });
 
+// --- CONTRACTOR PAYOUT LOGIC ---
+// Transfer funds from platform account to contractor via Express Connect account
+// URL: /api/contractor-payout
+app.post('/contractor-payout', async (req, res) => {
+  try {
+    const { userId, amount } = req.body;
+    if (!userId || !amount || amount <= 0) {
+      return res.status(400).json({ success: false, error: 'userId and positive amount required' });
+    }
+
+    // Fetch contractor's data from Firestore
+    const userDoc = await admin.firestore().collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    const userData = userDoc.data();
+    let stripeAccountId = userData.stripeConnectedAccountId;
+    
+    // If no Stripe Connect account exists, create an Express account
+    if (!stripeAccountId) {
+      console.log('Creating Stripe Express Connect account for user:', userId);
+      const account = await stripe.accounts.create({
+        type: 'express',
+        country: 'US',
+        email: userData.email || '',
+        business_type: 'individual',
+        business_profile: {
+          url: 'https://quicktrash.org'
+        },
+        capabilities: {
+          transfers: { requested: true }
+        },
+        settings: {
+          payouts: {
+            schedule: {
+              interval: 'manual'
+            }
+          }
+        },
+        metadata: {
+          userId: userId,
+          createdBy: 'quicktrash_payout_system'
+        }
+      });
+      stripeAccountId = account.id;
+      
+      // Save to Firestore
+      await admin.firestore().collection('users').doc(userId).update({
+        stripeConnectedAccountId: stripeAccountId
+      });
+      console.log('Created Stripe Express account:', stripeAccountId);
+      
+      // Return error asking user to complete onboarding first
+      const accountLink = await stripe.accountLinks.create({
+        account: stripeAccountId,
+        refresh_url: 'https://quicktrash.org/payment-methods',
+        return_url: 'https://quicktrash.org/payment-methods',
+        type: 'account_onboarding',
+        collect: 'currently_due' // Collect all currently required information including SSN, DOB
+      });
+      
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Account setup required',
+        requiresOnboarding: true,
+        onboardingUrl: accountLink.url,
+        message: 'Please complete your payout account setup to enable withdrawals.'
+      });
+    }
+
+    // Check if account has transfers capability enabled
+    const account = await stripe.accounts.retrieve(stripeAccountId);
+    if (!account.capabilities?.transfers || account.capabilities.transfers !== 'active') {
+      // Generate new onboarding link
+      const accountLink = await stripe.accountLinks.create({
+        account: stripeAccountId,
+        refresh_url: 'https://quicktrash.org/payment-methods',
+        return_url: 'https://quicktrash.org/payment-methods',
+        type: 'account_onboarding',
+        collect: 'currently_due'
+      });
+      
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Account setup incomplete',
+        requiresOnboarding: true,
+        onboardingUrl: accountLink.url,
+        message: 'Please complete your payout account setup to enable withdrawals.'
+      });
+    }
+
+    // Check if account has external accounts (bank/card) for payouts
+    const externalAccounts = await stripe.accounts.listExternalAccounts(
+      stripeAccountId,
+      { object: 'bank_account', limit: 1 }
+    );
+    
+    if (externalAccounts.data.length === 0) {
+      // No bank account added, need to complete onboarding
+      const accountLink = await stripe.accountLinks.create({
+        account: stripeAccountId,
+        refresh_url: 'https://quicktrash.org/payment-methods',
+        return_url: 'https://quicktrash.org/payment-methods',
+        type: 'account_onboarding',
+        collect: 'currently_due'
+      });
+      
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Bank account required',
+        requiresOnboarding: true,
+        onboardingUrl: accountLink.url,
+        message: 'Please add a bank account or debit card to receive payouts.'
+      });
+    }
+
+    // Create a transfer from your platform account to the contractor's connected account
+    const transfer = await stripe.transfers.create({
+      amount: Math.round(amount * 100), // Amount in cents
+      currency: 'usd',
+      destination: stripeAccountId,
+      description: `Payout to contractor ${userId}`,
+      metadata: {
+        userId: userId,
+        type: 'contractor_payout'
+      }
+    });
+
+    console.log(`Transfer created: ${transfer.id} for $${amount} to account ${stripeAccountId}`);
+
+    // Try to trigger an instant payout from their Connect account balance to their bank/card
+    try {
+      const payout = await stripe.payouts.create(
+        {
+          amount: Math.round(amount * 100),
+          currency: 'usd',
+          method: 'instant',
+          statement_descriptor: 'QuickTrash Payout'
+        },
+        {
+          stripeAccount: stripeAccountId // Create payout on their Connect account
+        }
+      );
+      console.log(`Instant payout created: ${payout.id}`);
+      res.json({ success: true, transfer, payout });
+    } catch (payoutError) {
+      console.log('Instant payout failed, will use standard payout:', payoutError.message);
+      // If instant payout fails, try standard payout
+      try {
+        const payout = await stripe.payouts.create(
+          {
+            amount: Math.round(amount * 100),
+            currency: 'usd',
+            method: 'standard',
+            statement_descriptor: 'QuickTrash Payout'
+          },
+          {
+            stripeAccount: stripeAccountId
+          }
+        );
+        console.log(`Standard payout created: ${payout.id}`);
+        res.json({ success: true, transfer, payout });
+      } catch (standardPayoutError) {
+        console.log('Standard payout also failed:', standardPayoutError.message);
+        // Transfer succeeded but payout failed - funds are in their Stripe balance
+        res.json({ 
+          success: true, 
+          transfer, 
+          message: 'Transfer completed. Funds will be paid out according to the account schedule.'
+        });
+      }
+    }
+  } catch (error) {
+    console.error('contractor-payout error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // --- CONNECTED ACCOUNTS & WITHDRAWAL LOGIC ---
 // Attach payout card to Stripe connected account
 // URL: /api/add-payout-card
@@ -180,19 +327,14 @@ app.post('/create-connected-account', async (req, res) => {
     const { email, userId } = req.body;
     if (!email) return res.status(400).json({ error: 'email required' });
 
-    // Create Express account for individual payouts only
+    // Create Express account - simpler setup for receiving transfers
+    // Express accounts can receive transfers once they add a bank account or debit card
     const account = await stripe.accounts.create({
       type: 'express',
       email,
-      business_type: 'individual',
+      country: 'US', // Required for Express accounts
       capabilities: {
-        transfers: { requested: true },
-        card_payments: { requested: false }, // Not needed for contractors
-      },
-      settings: {
-        payouts: {
-          schedule: { delay_days: 2, interval: 'daily' },
-        },
+        transfers: { requested: true }, // Enable transfers to receive payouts
       },
     });
 
@@ -205,11 +347,193 @@ app.post('/create-connected-account', async (req, res) => {
       }
     }
 
-    // No onboarding link needed; contractors only receive payouts
-    res.json({ accountId: account.id });
+    // Create onboarding link so contractor can add bank/debit card and complete all required info
+    // This enables the transfers capability and ensures compliance
+    const accountLink = await stripe.accountLinks.create({
+      account: account.id,
+      refresh_url: 'https://quicktrash.org/payment-methods',
+      return_url: 'https://quicktrash.org/payment-methods',
+      type: 'account_onboarding',
+      collect: 'currently_due', // Force Stripe to collect all required info (DOB, SSN, etc.)
+    });
+
+    res.json({ success: true, accountId: account.id, onboardingUrl: accountLink.url });
   } catch (err) {
     console.error('create-connected-account error', err);
-  res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Update contractor information (SSN, DOB, address) for Stripe Connect account
+// URL: /api/update-contractor-info
+// Note: Express accounts don't allow updating individual info via API
+// This endpoint generates an onboarding link with prefilled data
+app.post('/update-contractor-info', async (req, res) => {
+  try {
+    const { userId, accountId, individual } = req.body;
+    
+    console.log('=== UPDATE CONTRACTOR INFO REQUEST ===');
+    console.log('userId:', userId);
+    console.log('accountId:', accountId);
+    console.log('individual data:', JSON.stringify(individual, null, 2));
+    
+    if (!accountId || !individual) {
+      console.log('ERROR: Missing accountId or individual data');
+      return res.status(400).json({ success: false, error: 'accountId and individual data required' });
+    }
+
+    console.log('Fetching account to check status...');
+    const account = await stripe.accounts.retrieve(accountId);
+    console.log('Account type:', account.type);
+    console.log('Requirements currently_due:', account.requirements?.currently_due);
+    
+    // For Express accounts, we can't update individual info directly
+    // We need to create an onboarding link for them to complete
+    console.log('Creating account onboarding link...');
+    
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: 'https://quicktrash.org/payment-methods',
+      return_url: 'https://quicktrash.org/payment-methods',
+      type: 'account_onboarding',
+      collect: 'currently_due'
+    });
+
+    console.log('✅ Created onboarding link');
+
+    res.json({
+      success: true,
+      requiresOnboarding: true,
+      onboardingUrl: accountLink.url,
+      message: 'Please complete verification through Stripe to enable payouts.'
+    });
+    
+  } catch (err) {
+    console.error('❌ update-contractor-info error:', err);
+    console.error('Error code:', err.code);
+    console.error('Error type:', err.type);
+    console.error('Error message:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Request Contractor Verification - Creates account and triggers Stripe verification emails
+// URL: /api/request-contractor-verification
+app.post('/request-contractor-verification', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    console.log('=== REQUEST CONTRACTOR VERIFICATION ===');
+    console.log('userId:', userId);
+    
+    if (!userId) {
+      console.log('ERROR: Missing userId');
+      return res.status(400).json({ success: false, error: 'userId required' });
+    }
+
+    // Get user's Stripe account ID from Firestore
+    const userDoc = await admin.firestore().collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      console.log('ERROR: User not found in Firestore');
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const userData = userDoc.data();
+    let stripeAccountId = userData.stripeConnectedAccountId;
+    const userEmail = userData.email || userData.contactEmail;
+
+    console.log('User email:', userEmail);
+    console.log('Existing Stripe account ID:', stripeAccountId);
+
+    // If Stripe account already exists
+    if (stripeAccountId) {
+      console.log('Account already exists, creating account link to trigger email...');
+      
+      // Create an account link to trigger Stripe's verification email
+      const accountLink = await stripe.accountLinks.create({
+        account: stripeAccountId,
+        refresh_url: 'https://quicktrash.org/payment-methods',
+        return_url: 'https://quicktrash.org/payment-methods',
+        type: 'account_onboarding',
+        collect: 'currently_due'
+      });
+
+      console.log('✅ Created account link - Stripe will send verification email');
+
+      res.json({
+        success: true,
+        message: 'A verification link has been sent to your email by Stripe',
+        email: userEmail,
+        accountId: stripeAccountId
+      });
+      return;
+    }
+
+    // Create new Express Connect account
+    console.log('Creating new Express Connect account...');
+    
+    const account = await stripe.accounts.create({
+      type: 'express',
+      country: 'US',
+      email: userEmail,
+      business_type: 'individual',
+      business_profile: {
+        url: 'https://quicktrash.org'
+      },
+      capabilities: {
+        card_payments: { requested: false },
+        transfers: { requested: true }
+      },
+      settings: {
+        payouts: {
+          schedule: { interval: 'manual' }
+        }
+      },
+      metadata: {
+        userId: userId,
+        platform: 'quicktrash'
+      }
+    });
+
+    stripeAccountId = account.id;
+    console.log('✅ Created Stripe account:', stripeAccountId);
+
+    // Save to Firestore
+    await admin.firestore().collection('users').doc(userId).update({
+      stripeConnectedAccountId: stripeAccountId,
+      stripeAccountCreatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Create an account link to trigger Stripe's verification email
+    console.log('Creating account link to trigger verification email...');
+    
+    const accountLink = await stripe.accountLinks.create({
+      account: stripeAccountId,
+      refresh_url: 'https://quicktrash.org/payment-methods',
+      return_url: 'https://quicktrash.org/payment-methods',
+      type: 'account_onboarding',
+      collect: 'currently_due'
+    });
+
+    console.log('✅ Created account link - Stripe will send verification email to:', userEmail);
+
+    // Note: When you create an account link, Stripe sends an email to the connected account's
+    // email address with the verification link. The email contains "Request Information" links
+    // for SSN, DOB, and other required fields.
+
+    res.json({
+      success: true,
+      message: 'Your Stripe payout account has been created! Check your email for a verification link from Stripe.',
+      email: userEmail,
+      accountId: stripeAccountId
+    });
+    
+  } catch (err) {
+    console.error('❌ request-contractor-verification error:', err);
+    console.error('Error code:', err.code);
+    console.error('Error type:', err.type);
+    console.error('Error message:', err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -419,13 +743,118 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   res.json({ received: true });
 });
 
+// List all Stripe Connected Accounts
+// URL: /api/list-stripe-accounts
+app.get('/list-stripe-accounts', async (req, res) => {
+  try {
+    // List all connected accounts (paginated)
+    let accounts = [];
+    let starting_after = undefined;
+    let has_more = true;
+    while (has_more) {
+      const resp = await stripe.accounts.list({ limit: 100, starting_after });
+      accounts = accounts.concat(resp.data.map(acc => ({
+        id: acc.id,
+        email: acc.email,
+        name: acc.individual ? `${acc.individual.first_name || ''} ${acc.individual.last_name || ''}`.trim() : '',
+        status: acc.charges_enabled && acc.payouts_enabled ? 'active' : 'pending',
+      })));
+      has_more = resp.has_more;
+      if (has_more) starting_after = resp.data[resp.data.length - 1].id;
+    }
+    res.json({ success: true, accounts });
+  } catch (err) {
+    console.error('Error listing Stripe accounts:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get Stripe Connected Account Details
+// URL: /api/get-stripe-account-details?id=acct_xxx
+app.get('/get-stripe-account-details', async (req, res) => {
+  try {
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ error: 'Missing account id' });
+    const account = await stripe.accounts.retrieve(id);
+    res.json({ success: true, account });
+  } catch (err) {
+    console.error('Error fetching Stripe account details:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Request Stripe Remediation Link (Request Information)
+// URL: /api/request-stripe-remediation-link
+app.post('/request-stripe-remediation-link', async (req, res) => {
+  try {
+    const { accountId } = req.body;
+    if (!accountId) return res.status(400).json({ success: false, error: 'Missing accountId' });
+
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: 'https://quicktrash.org/payment-methods',
+      return_url: 'https://quicktrash.org/payment-methods',
+      type: 'account_onboarding',
+      collect: 'currently_due'
+    });
+
+    res.json({ success: true, url: accountLink.url });
+  } catch (err) {
+    console.error('Error creating Stripe remediation link:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Export the Express app as a Firebase Function named 'api'
 // Local run support: start Express server if run directly
+
+// --- SEND REMEDIATION LINK EMAIL ENDPOINT ---
+// URL: /api/send-remediation-link-email
+const nodemailer = require('nodemailer');
+app.post('/send-remediation-link-email', async (req, res) => {
+  try {
+    const { to, subject, message, remediationLink } = req.body;
+    const missingFields = [];
+    if (!to) missingFields.push('to');
+    if (!subject) missingFields.push('subject');
+    if (!message) missingFields.push('message');
+    if (!remediationLink) missingFields.push('remediationLink');
+    if (missingFields.length > 0) {
+      console.log('Missing required fields in /send-remediation-link-email:', missingFields);
+      return res.status(400).json({ success: false, error: 'Missing required fields', missingFields });
+    }
+
+    // Configure transporter (use environment variables for credentials)
+    const transporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE || 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+      to,
+      subject,
+      html: `<p>${message}</p><p><a href="${remediationLink}">${remediationLink}</a></p>`
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to send email:', err);
+    res.status(500).json({ success: false, error: 'Failed to send email', details: String(err) });
+  }
+});
+
 if (require.main === module) {
   const port = process.env.PORT || 5001;
   app.listen(port, () => {
     console.log(`Express server running locally on port ${port}`);
   });
 }
-const functions = require('firebase-functions');
+
+// Export the Express app as a Firebase Function named 'api'
+// The secret will be available through process.env.STRIPE_SECRET_KEY automatically
 exports.api = functions.https.onRequest(app);

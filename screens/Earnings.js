@@ -14,11 +14,12 @@ import {
   Dimensions,
   Platform,
   TextInput,
-  Alert, // Imported Alert for handleWithdraw
+  Alert,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
-import { useNavigation } from '@react-navigation/native'; // Added useNavigation import
+import { useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
@@ -257,6 +258,7 @@ const Earnings = () => {
 
   return (
     <View style={styles.container}>
+      <SharedHeader title="Earnings" showBackButton onBackPress={() => navigation.goBack()} />
       {/* Withdraw Modal */}
       {withdrawModalVisible && (
         <View style={styles.modalOverlay}>
@@ -266,7 +268,10 @@ const Earnings = () => {
             <Text style={{fontWeight: 'bold', fontSize: 28, color: '#222', marginBottom: 16}}>
               ${recentPayouts.reduce((sum, payout) => sum + (typeof payout.amount === 'number' ? payout.amount : 0), 0).toFixed(2)}
             </Text>
-            <Text style={styles.modalLabel}>Payout will be sent to: {paymentInfo.method} {paymentInfo.account}</Text>
+            <Text style={styles.modalLabel}>
+              Instant payout will be sent to your saved debit card.{'\n'}
+              {!paymentInfo.account && 'Add a debit card in Payment Methods first.'}
+            </Text>
             <View style={styles.modalButtonRow}>
               <TouchableOpacity style={styles.modalCancelButton} onPress={() => setWithdrawModalVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
@@ -276,45 +281,75 @@ const Earnings = () => {
                 onPress={async () => {
                   setWithdrawModalVisible(false);
                   try {
-                    // Deduct the full available amount from contractorPayouts in jobs
-                    let remaining = recentPayouts.reduce((sum, payout) => sum + (typeof payout.amount === 'number' ? payout.amount : 0), 0);
-                    for (const payout of recentPayouts) {
-                      if (remaining <= 0) break;
-                      const jobId = payout.id;
-                      const currentPayout = payout.amount;
-                      const deduct = Math.min(currentPayout, remaining);
-                      await import('firebase/firestore').then(({ updateDoc, doc }) => {
-                        updateDoc(doc(db, 'jobs', jobId), {
-                          'pricing.contractorPayout': currentPayout - deduct
-                        });
-                      });
-                      remaining -= deduct;
+                    const totalAmount = recentPayouts.reduce((sum, payout) => sum + (typeof payout.amount === 'number' ? payout.amount : 0), 0);
+                    
+                    if (totalAmount <= 0) {
+                      Alert.alert('Error', 'No funds available to withdraw');
+                      return;
                     }
-                    // Call backend API to trigger Stripe payout
+
+                    // Call backend API to trigger Stripe instant payout to debit card
+                    console.log('Initiating withdrawal for amount:', totalAmount);
                     const res = await fetch('https://us-central1-quicktrash-1cdff.cloudfunctions.net/api/contractor-payout', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ userId: user.uid, amount: recentPayouts.reduce((sum, payout) => sum + (typeof payout.amount === 'number' ? payout.amount : 0), 0) })
+                      body: JSON.stringify({ userId: user.uid, amount: totalAmount })
                     });
+                    
+                    console.log('Response status:', res.status);
                     const data = await res.json();
+                    console.log('Response data:', data);
+                    
                     if (data.success) {
-                      Alert.alert('Success', 'Withdrawal initiated!');
-                      // Refresh payouts after withdrawal
-                      // Re-fetch recentPayouts from Firestore
-                      const jobsQuery = query(collection(db, 'jobs'), where('contractorId', '==', user.uid));
-                      onSnapshot(jobsQuery, (snapshot) => {
-                        const payouts = [];
-                        snapshot.forEach(docSnap => {
-                          const job = docSnap.data();
-                          const payout = job?.pricing?.contractorPayout || 0;
-                          payouts.push({ id: docSnap.id, amount: payout });
+                      // Deduct the full available amount from contractorPayouts in jobs
+                      let remaining = totalAmount;
+                      for (const payout of recentPayouts) {
+                        if (remaining <= 0) break;
+                        const jobId = payout.id;
+                        const currentPayout = payout.amount;
+                        const deduct = Math.min(currentPayout, remaining);
+                        await import('firebase/firestore').then(({ updateDoc, doc }) => {
+                          updateDoc(doc(db, 'jobs', jobId), {
+                            'pricing.contractorPayout': currentPayout - deduct
+                          });
                         });
-                        setRecentPayouts(payouts);
-                      });
+                        remaining -= deduct;
+                      }
+                      
+                      Alert.alert('Success', `Instant payout of $${totalAmount.toFixed(2)} sent to your card!`);
                     } else {
-                      Alert.alert('Error', data.message || 'Withdrawal failed.');
+                      console.error('Withdrawal error:', data.error);
+                      
+                      // Check if onboarding is required
+                      if (data.requiresOnboarding && data.onboardingUrl) {
+                        Alert.alert(
+                          'Complete Verification in Browser', 
+                          data.message || 'For security, verification must be completed through Stripe. This will open in your browser and only takes a few minutes.',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { 
+                              text: 'Continue', 
+                              onPress: () => {
+                                Linking.openURL(data.onboardingUrl).catch(err => {
+                                  console.error('Failed to open onboarding URL:', err);
+                                  Alert.alert('Error', 'Failed to open verification page. Please try again.');
+                                });
+                              }
+                            }
+                          ]
+                        );
+                      } else if (data.error && data.error.toLowerCase().includes('card')) {
+                        Alert.alert(
+                          'Card Required', 
+                          'Please add a debit card in Payment Methods to receive instant payouts. Credit cards are not supported.',
+                          [{ text: 'Go to Payment Methods', onPress: () => navigation.navigate('PaymentMethods') }]
+                        );
+                      } else {
+                        Alert.alert('Error', data.error || 'Withdrawal failed. Please try again.');
+                      }
                     }
                   } catch (err) {
+                    console.error('Withdrawal exception:', err);
                     Alert.alert('Error', err.message || 'Withdrawal failed.');
                   }
                 }}

@@ -12,9 +12,11 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import SharedHeader from '../components/SharedHeader';
 
 const UserManagement = () => {
+  const navigation = useNavigation();
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -316,14 +318,18 @@ const UserManagement = () => {
     <View style={styles.container}>
       <SharedHeader 
         title="User Management" 
-        showBackButton 
-        rightComponent={
-          <TouchableOpacity style={styles.addButton}>
-            <Ionicons name="add" size={20} color="#34A853" />
-            <Text style={styles.addButtonText}>Add User</Text>
-          </TouchableOpacity>
-        }
+        showBackButton
       />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 8, gap: 8 }}>
+        <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('Accounts')}>
+          <Ionicons name="people" size={20} color="#2196F3" />
+          <Text style={[styles.addButtonText, { color: '#2196F3' }]}>Accounts</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.addButton}>
+          <Ionicons name="add" size={20} color="#34A853" />
+          <Text style={styles.addButtonText}>Add User</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.content}>
         {/* Search and Filters */}

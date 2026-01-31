@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payout Setup Complete - QuickTrash</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+            text-align: center;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #34A853;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            animation: scaleIn 0.6s ease-out 0.2s both;
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0);
+            }
+            to {
+                transform: scale(1);
+            }
+        }
+
+        .success-icon svg {
+            width: 40px;
+            height: 40px;
+            stroke: white;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #1F2937;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        p {
+            font-size: 16px;
+            color: #6B7280;
+            line-height: 1.6;
+            margin-bottom: 32px;
+        }
+
+        .info-box {
+            background: #F3F4F6;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 32px;
+            text-align: left;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .info-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .info-icon {
+            width: 24px;
+            height: 24px;
+            background: #34A853;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+
+        .info-icon svg {
+            width: 14px;
+            height: 14px;
+            stroke: white;
+            stroke-width: 3;
+            fill: none;
+        }
+
+        .info-text {
+            font-size: 14px;
+            color: #374151;
+            line-height: 1.4;
+        }
+
+        .button {
+            display: inline-block;
+            background: #34A853;
+            color: white;
+            padding: 14px 32px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(52, 168, 83, 0.2);
+        }
+
+        .button:hover {
+            background: #2d9248;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(52, 168, 83, 0.3);
+        }
+
+        .button:active {
+            transform: translateY(0);
+        }
+
+        .secondary-text {
+            font-size: 14px;
+            color: #9CA3AF;
+            margin-top: 24px;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            p {
+                font-size: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🚮</div>
+        
+        <div class="success-icon">
+            <svg viewBox="0 0 24 24">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+        </div>
+
+        <h1>Setup Complete!</h1>
+        <p>Your payout account has been successfully configured. You can now receive payments for completed jobs.</p>
+
+        <div class="info-box">
+            <div class="info-item">
+                <div class="info-icon">
+                    <svg viewBox="0 0 24 24">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <div class="info-text">
+                    <strong>Account verified</strong> - Your identity has been confirmed
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-icon">
+                    <svg viewBox="0 0 24 24">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <div class="info-text">
+                    <strong>Payout method added</strong> - Your bank account is ready to receive funds
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-icon">
+                    <svg viewBox="0 0 24 24">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <div class="info-text">
+                    <strong>Withdrawals enabled</strong> - You can now withdraw your earnings anytime
+                </div>
+            </div>
+        </div>
+
+        <a href="quicktrash://payment-methods" class="button">Return to App</a>
+
+        <p class="secondary-text">
+            You can close this window and return to the QuickTrash app to start earning.
+        </p>
+    </div>
+
+    <script>
+        // Auto-redirect to app after 3 seconds
+        setTimeout(() => {
+            window.location.href = 'quicktrash://payment-methods';
+        }, 3000);
+    </script>
+</body>
+</html>
