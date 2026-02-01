@@ -33,6 +33,7 @@ import Accounts from './screens/Accounts';
 import AccountDetails from './screens/AccountDetails';
 
 // Customer screens
+import PaymentScreen from './screens/PaymentScreen';
 import PaymentMethods from './screens/PaymentMethods';
 import WebViewScreen from './screens/WebViewScreen';
 
@@ -261,6 +262,15 @@ function App() {
             component={AccountDetails} 
             options={{ headerShown: false }} 
           />
+        <Stack.Screen
+  name="PaymentModal"
+  component={PaymentScreen}
+  options={{ 
+    presentation: 'modal', 
+    headerShown: true, 
+    title: 'Secure Payment' 
+  }}
+/>
         </Stack.Navigator>
       </NavigationContainer>
     </UserProvider>

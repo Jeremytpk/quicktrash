@@ -43,14 +43,14 @@ const CustomerDashboard = ({ navigation }) => {
   ];
 
   const volumeSizes = [
-    { id: 'bags', name: '1-5 Bags', description: 'Small household bags', price: '$15' },
-    { id: 'pickup_load', name: 'Pickup Load', description: 'Half truck bed', price: '$45' },
-    { id: 'trailer_load', name: 'Trailer Load', description: 'Full trailer', price: '$85' },
+    { id: 'bags', name: '1-5 Bags', description: 'Small household bags', price: '$1' },
+    { id: 'pickup_load', name: 'Pickup Load', description: 'Half truck bed', price: '$1' },
+    { id: 'trailer_load', name: 'Trailer Load', description: 'Full trailer', price: '$1' },
   ];
 
   const recentOrders = [
-    { id: 1, type: 'Household Trash', date: '2025-08-28', status: 'Completed', amount: '$15' },
-    { id: 2, type: 'Bulk Items', date: '2025-08-25', status: 'Completed', amount: '$45' },
+    { id: 1, type: 'Household Trash', date: '2025-08-28', status: 'Completed', amount: '$1' },
+    { id: 2, type: 'Bulk Items', date: '2025-08-25', status: 'Completed', amount: '$1' },
   ];
 
   const handleNewOrder = () => {

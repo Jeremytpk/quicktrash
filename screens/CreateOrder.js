@@ -48,21 +48,21 @@ const CreateOrder = ({ navigation, route }) => {
       name: '1-5 Bags', 
       description: 'Small household bags',
       icon: 'bag',
-      basePrice: 15
+      basePrice: 1
     },
     { 
       id: 'pickup_load', 
       name: 'Pickup Load', 
       description: 'Half truck bed full',
       icon: 'car',
-      basePrice: 45
+      basePrice: 1
     },
     { 
       id: 'trailer_load', 
       name: 'Trailer Load', 
       description: 'Full trailer or truck bed',
       icon: 'bus',
-      basePrice: 85
+      basePrice: 1
     },
   ];
 
