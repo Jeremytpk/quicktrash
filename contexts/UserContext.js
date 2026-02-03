@@ -18,6 +18,7 @@ export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
+  const [contractorId, setContractorId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,11 +32,13 @@ export const UserProvider = ({ children }) => {
             setUser(firebaseUser);
             setUserRole(userData.role);
             setUserLocation(userData.currentLocation || null);
+            setContractorId(userData.contractorId || null);
           } else {
             // User document doesn't exist, might be first login
             setUser(firebaseUser);
             setUserRole(null);
             setUserLocation(null);
+            setContractorId(null);
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -73,10 +76,12 @@ export const UserProvider = ({ children }) => {
     user,
     userRole,
     userLocation,
+    contractorId,
     loading,
     getHomeDashboard,
     setUserRole,
     setUserLocation,
+    setContractorId,
   };
 
   // Ensure loading is always a boolean

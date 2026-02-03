@@ -30,7 +30,11 @@ import {
 const { width } = Dimensions.get('window');
 
 const JobMonitoring = ({ navigation }) => {
+  const [statusFilter, setStatusFilter] = useState('All');
   const [allJobs, setAllJobs] = useState([]);
+  const [selectedJobIds, setSelectedJobIds] = useState([]);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedJob, setSelectedJob] = useState(null);
@@ -97,8 +101,62 @@ const JobMonitoring = ({ navigation }) => {
   };
 
   const handleJobPress = (job) => {
-    setSelectedJob(job);
-    setShowJobModal(true);
+    if (multiSelectMode) {
+      if (selectedJobIds.includes(job.id)) {
+        setSelectedJobIds(selectedJobIds.filter((id) => id !== job.id));
+      } else {
+        setSelectedJobIds([...selectedJobIds, job.id]);
+      }
+    } else {
+      setSelectedJob(job);
+      setShowJobModal(true);
+    }
+  };
+
+  const handleLongPressJob = (job) => {
+    if (!multiSelectMode) {
+      setMultiSelectMode(true);
+      setSelectedJobIds([job.id]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedJobIds.length === allJobs.length) {
+      setSelectedJobIds([]);
+    } else {
+      setSelectedJobIds(allJobs.map((job) => job.id));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedJobIds.length === 0) return;
+    Alert.alert(
+      'Delete Jobs',
+      `Are you sure you want to delete ${selectedJobIds.length} job(s)? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive', onPress: async () => {
+            try {
+              for (const jobId of selectedJobIds) {
+                await deleteDoc(doc(db, 'jobs', jobId));
+              }
+              setSelectedJobIds([]);
+              setMultiSelectMode(false);
+              Alert.alert('Deleted', 'Selected jobs have been deleted.');
+            } catch (error) {
+              console.error('Error deleting jobs:', error);
+              Alert.alert('Error', 'Failed to delete jobs.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleCancelMultiSelect = () => {
+    setMultiSelectMode(false);
+    setSelectedJobIds([]);
   };
 
   const handleManualCancellation = async () => {
@@ -141,19 +199,36 @@ const JobMonitoring = ({ navigation }) => {
 
   // Helper function to render job cards
   const renderJobCard = ({ item: job }) => {
-    const statusColor = getStatusColor(job.status);
+    let statusColor = getStatusColor(job.status);
+    // Make 'Paid' status badge green
+    if ((job.status || '').toLowerCase() === 'paid') {
+      statusColor = '#22b3f6ff';
+    }
     const contractorInfo = job.contractorName || 'Unassigned';
     const customerInfo = job.customerName || 'N/A';
+    const isSelected = selectedJobIds.includes(job.id);
 
     return (
       <TouchableOpacity
-        style={styles.jobCard}
+        style={[styles.jobCard, multiSelectMode && isSelected && styles.selectedJobCard]}
         onPress={() => handleJobPress(job)}
+        onLongPress={() => handleLongPressJob(job)}
       >
         <View style={styles.jobCardHeader}>
           <Text style={styles.jobId}>Job #{job.id.slice(0, 6)}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-            <Text style={styles.statusText}>{job.status.replace(/_/g, ' ')}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={[styles.statusBadge, { backgroundColor: statusColor }]}> 
+              <Text style={styles.statusText}>{job.status.replace(/_/g, ' ')}</Text>
+            </View>
+            {multiSelectMode && (
+              <View style={{ marginLeft: 8 }}>
+                <Ionicons
+                  name={isSelected ? 'checkbox' : 'square-outline'}
+                  size={22}
+                  color={isSelected ? '#34A853' : '#9CA3AF'}
+                />
+              </View>
+            )}
           </View>
         </View>
         <Text style={styles.jobDetails}>Customer: {customerInfo}</Text>
@@ -178,6 +253,32 @@ const JobMonitoring = ({ navigation }) => {
     }
   };
 
+  // Filter jobs by status and search query (customer name or job number)
+  const filteredJobs = allJobs.filter((job) => {
+    // Status filter
+    if (statusFilter !== 'All') {
+      const statusMap = {
+        'Paid': 'paid',
+        'Accepted': 'accepted',
+        'Pending': 'pending',
+        'Cancelled': ['cancelled', 'cancelled_by_employee', 'cancelled_by_customer'],
+        'Completed': 'completed',
+      };
+      const jobStatus = (job.status || '').toLowerCase();
+      if (Array.isArray(statusMap[statusFilter])) {
+        if (!statusMap[statusFilter].includes(jobStatus)) return false;
+      } else {
+        if (jobStatus !== statusMap[statusFilter]) return false;
+      }
+    }
+    // Search filter
+    const customerName = (job.customerName || '').toLowerCase();
+    const jobId = (job.id || '').toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return customerName.includes(query) || jobId.includes(query);
+  });
+
   return (
     <View style={styles.container}>
       <SharedHeader
@@ -185,20 +286,105 @@ const JobMonitoring = ({ navigation }) => {
         subtitle="Live Job Tracking"
         showBackButton={true}
         rightComponent={
-          <TouchableOpacity onPress={onRefresh}>
-            <Ionicons name="refresh" size={24} color="#333" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity onPress={onRefresh} style={{ marginRight: 12 }}>
+              <Ionicons name="refresh" size={24} color="#333" />
+            </TouchableOpacity>
+            {/* Multi-select mode entry button */}
+            {!multiSelectMode && (
+              <TouchableOpacity onPress={() => setMultiSelectMode(true)}>
+                <Ionicons name="trash" size={24} color="#EF4444" />
+              </TouchableOpacity>
+            )}
+          </View>
         }
       />
 
+      {/* Multi-select toolbar */}
+      {multiSelectMode && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: '#F3F4F6', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' }}>
+          <TouchableOpacity onPress={handleSelectAll} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
+            <Ionicons name={selectedJobIds.length === allJobs.length ? 'checkbox' : 'square-outline'} size={22} color="#34A853" />
+            <Text style={{ fontSize: 14, color: '#374151', marginLeft: 4 }}>Select All</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleDeleteSelected} style={{ flexDirection: 'row', alignItems: 'center', marginRight: 16 }}>
+            <Ionicons name="trash" size={22} color="#EF4444" />
+            <Text style={{ fontSize: 14, color: '#EF4444', marginLeft: 4 }}>Delete</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleCancelMultiSelect} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="close" size={22} color="#6B7280" />
+            <Text style={{ fontSize: 14, color: '#6B7280', marginLeft: 4 }}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={{ marginLeft: 16, color: '#374151', fontWeight: 'bold' }}>{selectedJobIds.length} selected</Text>
+        </View>
+      )}
+
+      {/* Status Filter Bar */}
+      <View style={{
+        backgroundColor: '#E6F0FA',
+        paddingVertical: 14,
+        paddingHorizontal: 0,
+        marginBottom: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#D1E3F8',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 2,
+        elevation: 1,
+      }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', paddingHorizontal: 12 }} contentContainerStyle={{ alignItems: 'center' }}>
+          {['All', 'Paid', 'Accepted', 'Pending', 'Cancelled', 'Completed'].map((status) => (
+            <TouchableOpacity
+              key={status}
+              onPress={() => setStatusFilter(status)}
+              style={{
+                paddingHorizontal: 18,
+                paddingVertical: 9,
+                borderRadius: 20,
+                backgroundColor: statusFilter === status ? '#1E88E5' : '#fff',
+                marginRight: 10,
+                borderWidth: 2,
+                borderColor: statusFilter === status ? '#1E88E5' : '#B6C6D8',
+                shadowColor: statusFilter === status ? '#1E88E5' : 'transparent',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: statusFilter === status ? 0.12 : 0,
+                shadowRadius: 4,
+                elevation: statusFilter === status ? 2 : 0,
+              }}
+            >
+              <Text style={{ color: statusFilter === status ? '#fff' : '#1E293B', fontWeight: '700', fontSize: 15, letterSpacing: 0.2 }}>{status}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Search Bar */}
+      <View style={[styles.searchBarContainer, { flexDirection: 'row', alignItems: 'center' }]}> 
+        <Ionicons name="search" size={20} color="#9CA3AF" style={{ marginRight: 8 }} />
+        <TextInput
+          style={[styles.searchInput, { flex: 1 }]}
+          placeholder="Search by customer name or job number"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCorrect={false}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+        />
+        <View style={{ marginLeft: 10, backgroundColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}>
+          <Text style={{ color: '#374151', fontWeight: 'bold', fontSize: 15 }}>Total: {allJobs.length}</Text>
+        </View>
+      </View>
+
       <FlatList
-        data={allJobs}
+        data={filteredJobs}
         renderItem={renderJobCard}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        extraData={selectedJobIds}
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
             <Ionicons name="briefcase-outline" size={64} color="#9CA3AF" />
@@ -290,9 +476,35 @@ const JobMonitoring = ({ navigation }) => {
       </Modal>
     </View>
   );
-};
+}
+// Search bar styles
+const searchBarHeight = 44;
 
 const styles = StyleSheet.create({
+  selectedJobCard: {
+    borderWidth: 2,
+    borderColor: '#34A853',
+    backgroundColor: '#E6F4EA',
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 8,
+    height: searchBarHeight,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#374151',
+    backgroundColor: 'transparent',
+    height: searchBarHeight,
+    paddingVertical: 0,
+  },
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',

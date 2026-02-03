@@ -326,31 +326,7 @@ const CreateOrder = ({ navigation, route }) => {
           </ScrollView>
         </View>
 
-        {/* Scheduling */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>When do you need pickup?</Text>
-          <View style={styles.schedulingOptions}>
-            <TouchableOpacity
-              style={[styles.schedulingOption, isASAP && styles.selectedOption]}
-              onPress={() => setIsASAP(true)}
-            >
-              <Ionicons name="flash" size={20} color={isASAP ? "#FFFFFF" : "#34A853"} />
-              <Text style={[styles.optionText, isASAP && styles.selectedOptionText]}>
-                ASAP
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.schedulingOption, !isASAP && styles.selectedOption]}
-              onPress={() => setIsASAP(false)}
-            >
-              <Ionicons name="calendar" size={20} color={!isASAP ? "#FFFFFF" : "#34A853"} />
-              <Text style={[styles.optionText, !isASAP && styles.selectedOptionText]}>
-                Schedule Later
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Scheduling section hidden as requested */}
 
         {/* Pricing Summary */}
         {pricing && (

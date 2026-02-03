@@ -9,6 +9,7 @@ import {
   Alert,
   Modal,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
@@ -25,7 +26,7 @@ import {
 } from 'firebase/firestore';
 
 const MyJobs = () => {
-  const { user } = useUser();
+  const { user, contractorId } = useUser();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,88 +34,50 @@ const MyJobs = () => {
   const [showJobDetails, setShowJobDetails] = useState(false);
   const [filter, setFilter] = useState('active'); // active, completed, all
 
-  // Mock jobs data - in real app, fetch from Firebase
+  // Fetch jobs for the logged-in contractor from Firestore
   useEffect(() => {
-    const mockJobs = [
-      {
-        id: '1',
-        customerId: 'customer1',
-        customerName: 'Sarah Martinez',
-        wasteType: 'household',
-        volume: '3 bags',
-        status: 'in_progress',
-        totalPrice: 25.00,
-        contractorEarnings: 17.50,
-        location: {
-          address: '123 Main St, Atlanta, GA 30309',
-          coordinates: { latitude: 33.7490, longitude: -84.3880 }
-        },
-        scheduledTime: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
-        acceptedAt: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-        notes: 'Trash bags are by the garage door',
-        photos: [],
-        distance: 1.2,
-        estimatedDuration: 15,
-      },
-      {
-        id: '2',
-        customerId: 'customer2',
-        customerName: 'Mike Johnson',
-        wasteType: 'bulk',
-        volume: 'Old sofa',
-        status: 'completed',
-        totalPrice: 45.00,
-        contractorEarnings: 31.50,
-        location: {
-          address: '456 Oak Ave, Marietta, GA 30060',
-          coordinates: { latitude: 33.9526, longitude: -84.5499 }
-        },
-        scheduledTime: new Date(Date.now() - 24 * 60 * 60 * 1000), // yesterday
-        acceptedAt: new Date(Date.now() - 25 * 60 * 60 * 1000),
-        completedAt: new Date(Date.now() - 23 * 60 * 60 * 1000),
-        notes: 'Heavy item, may need help',
-        photos: ['before.jpg', 'after.jpg'],
-        distance: 2.8,
-        estimatedDuration: 30,
-        rating: 5,
-      },
-      {
-        id: '3',
-        customerId: 'customer3',
-        customerName: 'Lisa Chen',
-        wasteType: 'yard',
-        volume: 'Yard trimmings',
-        status: 'scheduled',
-        totalPrice: 35.00,
-        contractorEarnings: 24.50,
-        location: {
-          address: '789 Pine St, Sandy Springs, GA 30328',
-          coordinates: { latitude: 33.9304, longitude: -84.3733 }
-        },
-        scheduledTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // tomorrow
-        acceptedAt: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
-        notes: 'Please use yard waste bin provided',
-        photos: [],
-        distance: 3.5,
-        estimatedDuration: 20,
-      },
-    ];
-
-    const filteredJobs = mockJobs.filter(job => {
-      switch (filter) {
-        case 'active':
-          return ['scheduled', 'in_progress'].includes(job.status);
-        case 'completed':
-          return job.status === 'completed';
-        default:
-          return true;
-      }
+    if (!user) return;
+    setLoading(true);
+    const jobsRef = collection(db, 'jobs');
+    const q = query(
+      jobsRef,
+      where('contractorId', '==', contractorId),
+      where('status', '==', 'accepted')
+    );
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      let jobsList = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        jobsList.push({
+          id: doc.id,
+          ...data,
+          // Convert Firestore Timestamps to JS Dates for compatibility
+          scheduledTime: data.scheduledTime?.toDate ? data.scheduledTime.toDate() : data.scheduledTime,
+          acceptedAt: data.acceptedAt?.toDate ? data.acceptedAt.toDate() : data.acceptedAt,
+          completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : data.completedAt,
+        });
+      });
+      // Filter by UI filter
+      const filteredJobs = jobsList.filter(job => {
+        switch (filter) {
+          case 'active':
+            return ['scheduled', 'in_progress'].includes(job.status);
+          case 'completed':
+            return job.status === 'completed';
+          default:
+            return true;
+        }
+      });
+      setJobs(filteredJobs);
+      setLoading(false);
+      setRefreshing(false);
+    }, (error) => {
+      setLoading(false);
+      setRefreshing(false);
+      Alert.alert('Error', 'Failed to fetch jobs.');
     });
-
-    setJobs(filteredJobs);
-    setLoading(false);
-    setRefreshing(false);
-  }, [filter]);
+    return () => unsubscribe();
+  }, [user, filter]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -444,6 +407,7 @@ const MyJobs = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: Platform.OS === 'android' ? 25 : 0,
     backgroundColor: '#F9FAFB',
   },
   filterContainer: {

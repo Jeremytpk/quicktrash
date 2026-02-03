@@ -86,11 +86,15 @@ const PaymentScreen = () => {
   const initializeStripeService = async () => {
     try {
       console.log('⏳ Initializing Stripe...');
+      console.log('🔑 Publishable Key exists:', !!process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY);
       await initializeStripe();
       setStripeInitialized(true);
       console.log('✅ Stripe initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize Stripe:', error);
+      console.error('❌ Error name:', error.name);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
       Alert.alert('Payment Error', 'Failed to initialize payment system. Please try again.');
     }
   };
@@ -117,25 +121,33 @@ const PaymentScreen = () => {
     try {
       setPaymentStatus('processing');
       setIsProcessing(true);
-      
-      PaymentService.validatePaymentAmount(amount);
 
+      console.log('💳 Step 1: Validating payment amount:', amount);
+      PaymentService.validatePaymentAmount(amount);
+      console.log('✅ Step 1 complete: Amount validated');
+
+      console.log('💳 Step 2: Creating payment method...');
       const paymentMethod = await createPaymentMethod();
+      console.log('💳 Step 2 result - paymentMethod:', JSON.stringify(paymentMethod, null, 2));
 
       if (!paymentMethod) {
         throw new Error('Failed to create payment method');
       }
+      console.log('✅ Step 2 complete: Payment method created');
 
+      console.log('💳 Step 3: Processing Stripe payment...');
       const result = await processStripePayment(paymentMethod, amount);
+      console.log('💳 Step 3 result:', JSON.stringify(result, null, 2));
+      console.log('💳 Step 3 result.status:', result.status, 'Type:', typeof result.status);
 
-      if (result.status === 'Succeeded') {
+      if (result.status?.toLowerCase() === 'succeeded') {
         await updateDoc(doc(db, 'jobs', orderId), {
           status: 'paid',
           paymentDetails: {
             transactionId: result.id,
             amount: amount,
             currency: 'usd',
-            paymentMethod: result.paymentMethod,
+            paymentMethodId: result.paymentMethod?.id || null,
             paidAt: new Date()
           }
         });
@@ -145,7 +157,7 @@ const PaymentScreen = () => {
           amount: amount,
           currency: 'usd',
           status: 'succeeded',
-          paymentMethod: result.paymentMethod
+          paymentMethodId: result.paymentMethod?.id || null
         });
         setPaymentStatus('success');
         
@@ -155,7 +167,10 @@ const PaymentScreen = () => {
       }
       
     } catch (error) {
-      console.error('Payment processing error:', error);
+      console.error('❌ Payment processing error:', error);
+      console.error('❌ Error name:', error.name);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
       setPaymentError(error.message || 'Payment processing failed');
       setPaymentStatus('failed');
     } finally {

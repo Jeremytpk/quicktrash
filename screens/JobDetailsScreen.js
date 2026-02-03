@@ -1,11 +1,42 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Image } from 'react-native';
+
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
+
 
 const JobDetailsScreen = ({ route, navigation }) => {
-  const { jobDetails } = route.params;
+  // Accept either jobDetails or jobId as param
+  const { jobDetails, jobId } = route.params || {};
+  const [job, setJob] = useState(jobDetails || null);
+  const [loading, setLoading] = useState(!jobDetails && !!jobId);
   const [image, setImage] = useState(null);
   const [isJobCompleted, setIsJobCompleted] = useState(false);
+
+  useEffect(() => {
+    const fetchJob = async () => {
+      if (!job && jobId) {
+        setLoading(true);
+        try {
+          const jobRef = doc(db, 'jobs', jobId);
+          const jobSnap = await getDoc(jobRef);
+          if (jobSnap.exists()) {
+            setJob({ id: jobSnap.id, ...jobSnap.data() });
+          } else {
+            Alert.alert('Error', 'Job not found.');
+            navigation.goBack();
+          }
+        } catch (e) {
+          Alert.alert('Error', 'Failed to load job details.');
+          navigation.goBack();
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    fetchJob();
+  }, [jobId]);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchCameraAsync({
@@ -29,13 +60,30 @@ const JobDetailsScreen = ({ route, navigation }) => {
     }
   };
 
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}> 
+        <ActivityIndicator size="large" color="#1E88E5" />
+        <Text style={{ marginTop: 16 }}>Loading job details...</Text>
+      </View>
+    );
+  }
+
+  if (!job) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}> 
+        <Text style={{ color: 'red' }}>Job details not found.</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Job Details</Text>
       <View style={styles.detailsContainer}>
-        <Text style={styles.detailText}>Address: {jobDetails.address}</Text>
-        <Text style={styles.detailText}>Payout: ${jobDetails.payout}</Text>
-        <Text style={styles.detailText}>Description: {jobDetails.description}</Text>
+        <Text style={styles.detailText}>Address: {job.pickupAddress?.fullAddress || job.address || 'N/A'}</Text>
+        <Text style={styles.detailText}>Payout: ${job.pricing?.contractorPayout || job.payout || 'N/A'}</Text>
+        <Text style={styles.detailText}>Description: {job.description || 'N/A'}</Text>
         {isJobCompleted && <Text style={styles.completedText}>Status: Completed</Text>}
       </View>
 

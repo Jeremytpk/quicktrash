@@ -31,6 +31,7 @@ import LocationTestSimple from './components/LocationTestSimple';
 import LocationVerification from './components/LocationVerification';
 import Accounts from './screens/Accounts';
 import AccountDetails from './screens/AccountDetails';
+import JobDetailsScreen from './screens/JobDetailsScreen';
 
 // Customer screens
 import PaymentScreen from './screens/PaymentScreen';
@@ -262,7 +263,12 @@ function App() {
             component={AccountDetails} 
             options={{ headerShown: false }} 
           />
-        <Stack.Screen
+          <Stack.Screen 
+            name="JobDetailsScreen" 
+            component={JobDetailsScreen} 
+            options={{ title: 'Job Details', headerTitleAlign: 'center' }} 
+          />
+          <Stack.Screen
   name="PaymentModal"
   component={PaymentScreen}
   options={{ 

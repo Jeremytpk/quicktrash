@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { collection, query, where, getCountFromServer } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
 import {
   View,
   Text,
@@ -35,15 +37,32 @@ const EmployeeDashboard = ({ navigation }) => {
   }, []);
   const [selectedDispute, setSelectedDispute] = useState(null);
 
-  // Mock data for admin dashboard
-  const [dashboardStats] = useState({
-    activeJobs: 12,
+
+  // Dashboard stats state
+  const [dashboardStats, setDashboardStats] = useState({
+    activeJobs: 0,
     availableDrivers: 8,
     completedToday: 27,
     revenue: '$1,234',
     avgRating: 4.7,
     disputes: 3,
   });
+
+  // Fetch count of jobs with status 'Pending', 'Accepted', or 'Paid'
+  useEffect(() => {
+    const fetchActiveJobsCount = async () => {
+      try {
+        const jobsRef = collection(db, 'jobs');
+        const q = query(jobsRef, where('status', 'in', ['pending', 'accepted', 'paid']));
+        const snapshot = await getCountFromServer(q);
+        setDashboardStats((prev) => ({ ...prev, activeJobs: snapshot.data().count }));
+      } catch (error) {
+        // fallback: do not update count
+        console.error('Error fetching active jobs count:', error);
+      }
+    };
+    fetchActiveJobsCount();
+  }, []);
 
   const [activeJobs] = useState([
     {
@@ -136,22 +155,26 @@ const EmployeeDashboard = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Today's Overview</Text>
           <View style={styles.statsGrid}>
-            <View style={[styles.statCard, { backgroundColor: '#34A853' }]}>
+            <TouchableOpacity
+              style={[styles.statCard, { backgroundColor: '#34A853' }]}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('JobMonitoring')}
+            >
               <Ionicons name="briefcase" size={24} color="#FFFFFF" />
               <Text style={styles.statNumber}>{dashboardStats.activeJobs}</Text>
               <Text style={styles.statLabel}>Active Jobs</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: '#1E88E5' }]}>
+            </TouchableOpacity>
+            <View style={[styles.statCard, { backgroundColor: '#1E88E5' }]}> 
               <Ionicons name="people" size={24} color="#FFFFFF" />
               <Text style={styles.statNumber}>{dashboardStats.availableDrivers}</Text>
               <Text style={styles.statLabel}>Available Drivers</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: '#FF8F00' }]}>
+            <View style={[styles.statCard, { backgroundColor: '#FF8F00' }]}> 
               <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
               <Text style={styles.statNumber}>{dashboardStats.completedToday}</Text>
               <Text style={styles.statLabel}>Completed Today</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: '#9C27B0' }]}>
+            <View style={[styles.statCard, { backgroundColor: '#9C27B0' }]}> 
               <Ionicons name="cash" size={24} color="#FFFFFF" />
               <Text style={styles.statNumber}>{dashboardStats.revenue}</Text>
               <Text style={styles.statLabel}>Revenue</Text>
@@ -403,7 +426,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 14,
+    fontWeight: '600',
     color: '#FFFFFF',
     marginTop: 4,
     textAlign: 'center',

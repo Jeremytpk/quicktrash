@@ -78,13 +78,8 @@ const ContractorDashboard = ({ navigation }) => {
     let jobsQuery;
     const jobsCollection = collection(db, 'jobs');
 
-    if (jobFilter === 'available') {
-      jobsQuery = query(jobsCollection, where('status', '==', 'available'));
-    } else {
-      // Assuming 'all' or another filter that doesn't need a specific status for this example
-      // You might need to adjust this logic based on your actual data structure/requirements for other filters
-      jobsQuery = query(jobsCollection); 
-    }
+  // Only show jobs with status 'paid'
+  jobsQuery = query(jobsCollection, where('status', '==', 'paid'));
 
     const unsubscribe = onSnapshot(
       jobsQuery,
@@ -178,19 +173,17 @@ const ContractorDashboard = ({ navigation }) => {
   };
 
   const handleAcceptJob = async () => {
-    if (!activeJob) return;
+    if (!activeJob || !user) return;
     try {
-      // NOTE: You are using a placeholder 'current-user-id' in the original code. 
-      // Make sure to replace this with the actual user.uid (e.g., user.uid)
       const jobRef = doc(db, 'jobs', activeJob.id);
-      await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: 'current-user-id' }); 
+      await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: user.uid });
       Alert.alert('Job Accepted!', `You accepted the ${activeJob.wasteType} pickup job.`);
     } catch (error) {
-       console.error("Error accepting job from modal:", error);
-       Alert.alert('Error', 'Could not accept job.');
+      console.error("Error accepting job from modal:", error);
+      Alert.alert('Error', 'Could not accept job.');
     } finally {
-       setShowJobModal(false);
-       setActiveJob(null);
+      setShowJobModal(false);
+      setActiveJob(null);
     }
   };
 
@@ -202,13 +195,12 @@ const ContractorDashboard = ({ navigation }) => {
   };
 
   const handleAcceptJobFromList = async (job) => {
+    if (!user) return;
     Alert.alert('Accept Job?', `Accept this ${job.wasteType} job for $${job.pricing?.contractorPayout || 'N/A'}?`,
       [{ text: 'Cancel', style: 'cancel' }, { text: 'Accept Job', onPress: async () => {
         try {
           const jobRef = doc(db, 'jobs', job.id);
-          // NOTE: You are using a placeholder 'current-user-id' in the original code. 
-          // Make sure to replace this with the actual user.uid (e.g., user.uid)
-          await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: 'current-user-id' }); 
+          await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: user.uid });
           Alert.alert('Job Accepted!', `You accepted the ${job.wasteType} pickup job.`);
         } catch (error) {
           console.error('Error accepting job:', error);
@@ -245,10 +237,9 @@ const ContractorDashboard = ({ navigation }) => {
     return () => clearTimeout(timer);
   }, [showJobModal, countdown]);
   
-  // A helper function to render a job card (placeholder for brevity)
+  // A helper function to render a job card (with Accept Job button always visible)
   const renderJobCard = (job) => (
     <View key={job.id} style={styles.jobCardContainer}>
-      {/* Actual job card implementation using job data */}
       <View style={[styles.jobCardNew, job.isHighPayout ? styles.highPayoutJob : styles.mediumPayoutJob]}>
         <View style={styles.jobCardHeader}>
           <View style={styles.jobTypeContainer}>
@@ -269,18 +260,22 @@ const ContractorDashboard = ({ navigation }) => {
             <Text style={styles.jobAddressNew}>{job.pickupAddress?.fullAddress || 'Address Not Available'}</Text>
           </View>
         </View>
-        {job.status === 'available' && (
-          <View style={styles.jobActions}>
+        <View style={styles.jobActions}>
+          {job.status === 'available' && (
             <TouchableOpacity style={styles.rejectJobButton} onPress={() => handleRejectJobFromList(job)}>
               <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
               <Text style={styles.rejectJobText}>Reject</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.acceptJobButton} onPress={() => handleAcceptJobFromList(job)}>
-              <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.acceptJobText}>Accept Job</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          )}
+          <TouchableOpacity style={styles.acceptJobButton} onPress={() => handleAcceptJobFromList(job)}>
+            <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.acceptJobText}>Accept Job</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.acceptJobButton, { backgroundColor: '#1E88E5', marginLeft: 8, flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }]} onPress={() => navigation.navigate('JobDetailsScreen', { jobId: job.id })}>
+            <Ionicons name="eye-outline" size={18} color="#FFFFFF" />
+            <Text style={{ color: '#FFFFFF', fontWeight: '600', marginLeft: 6 }}>View</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -322,15 +317,12 @@ const ContractorDashboard = ({ navigation }) => {
                     <Text style={styles.toggleText}>{showJobsContainer ? 'Hide' : 'Show'}</Text>
                 </TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
-                <TouchableOpacity style={[styles.filterButton, jobFilter === 'available' && styles.activeFilter]} onPress={() => setJobFilter('available')}>
-                    <Text style={[styles.filterText, jobFilter === 'available' && styles.activeFilterText]}>Available</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.filterButton, jobFilter === 'all' && styles.activeFilter]} onPress={() => setJobFilter('all')}>
-                    <Text style={[styles.filterText, jobFilter === 'all' && styles.activeFilterText]}>All Jobs</Text>
-                </TouchableOpacity>
-                {/* Add more filters as needed */}
-            </ScrollView>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
+        <TouchableOpacity style={[styles.filterButton, jobFilter === 'all' && styles.activeFilter]} onPress={() => setJobFilter('all')}>
+          <Text style={[styles.filterText, jobFilter === 'all' && styles.activeFilterText]}>All Jobs</Text>
+        </TouchableOpacity>
+        {/* Add more filters as needed */}
+      </ScrollView>
 
             {/* Job Cards List */}
             {showJobsContainer && (
@@ -413,8 +405,12 @@ const ContractorDashboard = ({ navigation }) => {
                 </View>
               </View>
               <View style={styles.actionButtons}>
-                <TouchableOpacity style={[styles.actionButton, styles.declineButton]} onPress={handleDeclineJob}><Text style={styles.declineButtonText}>Decline</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.actionButton, styles.acceptButton]} onPress={handleAcceptJob}><Text style={styles.acceptButtonText}>Accept Job</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, styles.declineButton]} onPress={handleDeclineJob}>
+                  <Text style={styles.declineButtonText}>Decline</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, styles.acceptButton]} onPress={handleAcceptJob}>
+                  <Text style={styles.acceptButtonText}>Accept Job</Text>
+                </TouchableOpacity>
               </View>
             </View>
           )}

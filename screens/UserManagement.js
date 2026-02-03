@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
 import {
   View,
   Text,
@@ -24,100 +26,43 @@ const UserManagement = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+    const [roleSwitching, setRoleSwitching] = useState(false);
+    const [newRole, setNewRole] = useState('');
 
-  // Mock users data
+  // Fetch users from Firestore
   useEffect(() => {
-    const mockUsers = [
-      {
-        id: '1',
-        displayName: 'Sarah Martinez',
-        email: 'customer.sarah.restaurant@quicktrash.com',
-        role: 'customer',
-        status: 'active',
-        joinDate: '2025-01-10',
-        lastLogin: '2025-01-15',
-        totalOrders: 12,
-        totalSpent: 340.50,
-        rating: 4.8,
-        verificationStatus: 'verified',
-        phone: '+1 (555) 123-4567',
-      },
-      {
-        id: '2',
-        displayName: 'Greg Wilson',
-        email: 'picker.greg.student@quicktrash.com',
-        role: 'contractor',
-        status: 'active',
-        joinDate: '2024-12-15',
-        lastLogin: '2025-01-15',
-        totalJobs: 45,
-        totalEarnings: 1850.75,
-        rating: 4.9,
-        verificationStatus: 'verified',
-        phone: '+1 (555) 987-6543',
-        vehicleInfo: {
-          make: 'Ford',
-          model: 'F-150',
-          year: '2019',
-          licensePlate: 'ABC1234'
-        }
-      },
-      {
-        id: '3',
-        displayName: 'Alex Kumar',
-        email: 'support.alex.tech@quicktrash.com',
-        role: 'employee',
-        status: 'active',
-        joinDate: '2024-11-01',
-        lastLogin: '2025-01-15',
-        department: 'Technical Support',
-        permissions: ['user_management', 'dispute_resolution'],
-        verificationStatus: 'verified',
-        phone: '+1 (555) 456-7890',
-      },
-      {
-        id: '4',
-        displayName: 'Mike Johnson',
-        email: 'customer.mike.homeowner@quicktrash.com',
-        role: 'customer',
-        status: 'suspended',
-        joinDate: '2024-12-20',
-        lastLogin: '2025-01-10',
-        totalOrders: 3,
-        totalSpent: 85.00,
-        rating: 3.2,
-        verificationStatus: 'pending',
-        phone: '+1 (555) 234-5678',
-        suspensionReason: 'Multiple complaints from contractors'
-      },
-    ];
-
-    setUsers(mockUsers);
-    setFilteredUsers(mockUsers);
-    setRefreshing(false);
+    const fetchUsers = async () => {
+      try {
+        const usersSnapshot = await getDocs(collection(db, 'users'));
+        const usersList = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setUsers(usersList);
+        setFilteredUsers(usersList);
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      }
+      setRefreshing(false);
+    };
+    fetchUsers();
   }, []);
 
   useEffect(() => {
     let filtered = users;
-
     // Filter by role
     if (selectedRole !== 'all') {
       filtered = filtered.filter(user => user.role === selectedRole);
     }
-
     // Filter by search query
     if (searchQuery) {
       filtered = filtered.filter(user =>
-        user.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase())
+        (user.displayName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (user.email || '').toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-
     setFilteredUsers(filtered);
   }, [users, selectedRole, searchQuery]);
 
   const getRoleColor = (role) => {
-    switch (role) {
+    switch (role || '') {
       case 'customer': return '#3B82F6';
       case 'contractor': return '#34A853';
       case 'employee': return '#7C3AED';
@@ -126,7 +71,7 @@ const UserManagement = () => {
   };
 
   const getStatusColor = (status) => {
-    switch (status) {
+    switch (status || '') {
       case 'active': return '#34A853';
       case 'suspended': return '#DC2626';
       case 'pending': return '#F59E0B';
@@ -135,7 +80,7 @@ const UserManagement = () => {
   };
 
   const getVerificationIcon = (status) => {
-    switch (status) {
+    switch (status || '') {
       case 'verified': return { name: 'checkmark-circle', color: '#34A853' };
       case 'pending': return { name: 'time', color: '#F59E0B' };
       case 'rejected': return { name: 'close-circle', color: '#DC2626' };
@@ -205,6 +150,35 @@ const UserManagement = () => {
           ]
         );
         break;
+        case 'generateContractorId':
+          // Generate a random contractorId (UUID-like)
+          const contractorId = 'ctr_' + Math.random().toString(36).substr(2, 9);
+          setUsers(prev =>
+            prev.map(u =>
+              u.id === user.id
+                ? { ...u, contractorId }
+                : u
+            )
+          );
+          Alert.alert('Success', `Contractor ID generated: ${contractorId}`);
+          break;
+        case 'switchRole':
+          if (!newRole) return;
+          setUsers(prev =>
+            prev.map(u =>
+              u.id === user.id
+                ? {
+                    ...u,
+                    role: newRole,
+                    contractorId: newRole === 'contractor' ? (u.contractorId || ('ctr_' + Math.random().toString(36).substr(2, 9))) : undefined
+                  }
+                : u
+            )
+          );
+          Alert.alert('Success', `Role switched to ${newRole.charAt(0).toUpperCase() + newRole.slice(1)}`);
+          setRoleSwitching(false);
+          setNewRole('');
+          break;
     }
   };
 
@@ -216,6 +190,10 @@ const UserManagement = () => {
 
   const renderUserCard = ({ item }) => {
     const verificationIcon = getVerificationIcon(item.verificationStatus);
+    const displayName = item.displayName || '';
+    const email = item.email || '';
+    const role = item.role || '';
+    const status = item.status || '';
     
     return (
       <TouchableOpacity
@@ -228,23 +206,23 @@ const UserManagement = () => {
         <View style={styles.userHeader}>
           <View style={styles.userInfo}>
             <View style={styles.userNameRow}>
-              <Text style={styles.userName}>{item.displayName}</Text>
+              <Text style={styles.userName}>{displayName}</Text>
               <Ionicons 
                 name={verificationIcon.name} 
                 size={16} 
                 color={verificationIcon.color} 
               />
             </View>
-            <Text style={styles.userEmail}>{item.email}</Text>
+            <Text style={styles.userEmail}>{email}</Text>
             <View style={styles.userMeta}>
-              <View style={[styles.roleBadge, { backgroundColor: getRoleColor(item.role) + '20' }]}>
-                <Text style={[styles.roleText, { color: getRoleColor(item.role) }]}>
-                  {item.role.charAt(0).toUpperCase() + item.role.slice(1)}
+              <View style={[styles.roleBadge, { backgroundColor: getRoleColor(role) + '20' }]}> 
+                <Text style={[styles.roleText, { color: getRoleColor(role) }]}> 
+                  {role ? role.charAt(0).toUpperCase() + role.slice(1) : ''}
                 </Text>
               </View>
-              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
-                <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                  {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(status) + '20' }]}> 
+                <Text style={[styles.statusText, { color: getStatusColor(status) }]}> 
+                  {status ? status.charAt(0).toUpperCase() + status.slice(1) : ''}
                 </Text>
               </View>
             </View>
@@ -320,7 +298,7 @@ const UserManagement = () => {
         title="User Management" 
         showBackButton
       />
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 8, gap: 8 }}>
+  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 8, gap: 8 }}>
         <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('Accounts')}>
           <Ionicons name="people" size={20} color="#2196F3" />
           <Text style={[styles.addButtonText, { color: '#2196F3' }]}>Accounts</Text>
@@ -329,6 +307,9 @@ const UserManagement = () => {
           <Ionicons name="add" size={20} color="#34A853" />
           <Text style={styles.addButtonText}>Add User</Text>
         </TouchableOpacity>
+        <Text style={{ marginLeft: 12, fontSize: 15, color: '#6B7280', fontWeight: '500' }}>
+          Total: {filteredUsers.length}
+        </Text>
       </View>
 
       <View style={styles.content}>
@@ -429,6 +410,21 @@ const UserManagement = () => {
                     <Text style={styles.infoLabel}>Joined</Text>
                     <Text style={styles.infoValue}>{selectedUser.joinDate}</Text>
                   </View>
+                    {selectedUser.role === 'contractor' && (
+                      <View style={styles.infoItem}>
+                        <Text style={styles.infoLabel}>Contractor ID</Text>
+                        <Text style={styles.infoValue}>{selectedUser.contractorId || 'Not generated'}</Text>
+                        <TouchableOpacity
+                          style={{ marginLeft: 8, backgroundColor: '#F0FDF4', borderRadius: 6, padding: 4 }}
+                          onPress={() => {
+                            setShowUserModal(false);
+                            handleUserAction('generateContractorId', selectedUser);
+                          }}
+                        >
+                          <Text style={{ color: '#34A853', fontWeight: '600', fontSize: 12 }}>Generate</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                 </View>
               </View>
 
@@ -461,6 +457,43 @@ const UserManagement = () => {
                 </View>
               )}
 
+                {/* Switch Role Section */}
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>Switch Role</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {['contractor', 'customer', 'employee'].map(role => (
+                      <TouchableOpacity
+                        key={role}
+                        style={{
+                          backgroundColor: selectedUser.role === role ? '#34A853' : '#F3F4F6',
+                          borderRadius: 20,
+                          paddingHorizontal: 16,
+                          paddingVertical: 8,
+                          marginRight: 8,
+                        }}
+                        onPress={() => {
+                          setRoleSwitching(true);
+                          setNewRole(role);
+                          Alert.alert(
+                            'Switch Role',
+                            `Are you sure you want to switch this user to ${role.charAt(0).toUpperCase() + role.slice(1)}?`,
+                            [
+                              { text: 'Cancel', style: 'cancel', onPress: () => setRoleSwitching(false) },
+                              { text: 'Confirm', style: 'default', onPress: () => {
+                                setShowUserModal(false);
+                                handleUserAction('switchRole', selectedUser);
+                              } }
+                            ]
+                          );
+                        }}
+                      >
+                        <Text style={{ color: selectedUser.role === role ? '#FFF' : '#34A853', fontWeight: '600' }}>
+                          {role.charAt(0).toUpperCase() + role.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
               {/* Actions */}
               <View style={styles.modalSection}>
                 <Text style={styles.modalSectionTitle}>Actions</Text>

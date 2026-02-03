@@ -100,8 +100,8 @@ const processRealPayment = async (paymentMethod, amount, orderData = {}) => {
   console.log('🚨 WARNING: This will process a real payment charge');
   
   // Step 1: Create payment intent on backend
-  const backendUrl = 'https://us-central1-quicktrash.cloudfunctions.net/api';
-  const response = await fetch(`${backendUrl}/api/create-payment-intent`, {
+  const backendUrl = 'https://us-central1-quicktrash-1cdff.cloudfunctions.net/api';
+  const response = await fetch(`${backendUrl}/create-payment-intent`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

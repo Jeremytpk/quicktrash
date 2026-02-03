@@ -20,6 +20,48 @@ const OrderHistory = ({ navigation }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  
+  const allSelected = orders.length > 0 && selectedOrders.length === orders.length;
+
+  const handleSelectOrder = (orderId) => {
+    setSelectedOrders((prev) =>
+      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(orders.map(order => order.id));
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedOrders.length === 0) return;
+    Alert.alert(
+      'Delete Selected Orders',
+      `Are you sure you want to permanently delete ${selectedOrders.length} order(s)? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await Promise.all(selectedOrders.map(orderId => deleteDoc(doc(db, 'jobs', orderId))));
+              setSelectedOrders([]);
+              Alert.alert('Deleted', 'Selected orders deleted successfully.');
+            } catch (error) {
+              console.error('Error deleting selected orders:', error);
+              Alert.alert('Error', 'Failed to delete selected orders.');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   useEffect(() => {
     if (!auth.currentUser) {
@@ -46,7 +88,9 @@ const OrderHistory = ({ navigation }) => {
         return b.createdAt - a.createdAt;
       });
 
-      setOrders(orderList);
+      // Filter to show only paid orders
+      const paidOrders = orderList.filter(order => order.status === 'paid');
+      setOrders(paidOrders);
       setLoading(false);
       setRefreshing(false);
     }, (error) => {
@@ -56,7 +100,7 @@ const OrderHistory = ({ navigation }) => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [navigation]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -68,6 +112,7 @@ const OrderHistory = ({ navigation }) => {
       case 'assigned': return '#1E88E5';
       case 'in_progress': return '#9C27B0';
       case 'completed': return '#34A853';
+      case 'paid': return '#34A853';
       case 'cancelled': return '#EF4444';
       default: return '#6B7280';
     }
@@ -79,6 +124,7 @@ const OrderHistory = ({ navigation }) => {
       case 'assigned': return 'Assigned';
       case 'in_progress': return 'In Progress';
       case 'completed': return 'Completed';
+      case 'paid': return 'Paid';
       case 'cancelled': return 'Cancelled';
       default: return 'Unknown';
     }
@@ -171,11 +217,22 @@ const OrderHistory = ({ navigation }) => {
 
   const renderOrderItem = ({ item }) => {
     const canCancel = ['pending', 'assigned'].includes(item.status);
-    const canReorder = ['completed', 'cancelled'].includes(item.status);
+    const canReorder = ['completed', 'cancelled', 'paid'].includes(item.status);
+    const isSelected = selectedOrders.includes(item.id);
 
     return (
       <View style={styles.orderCard}>
         <View style={styles.orderHeader}>
+          <TouchableOpacity
+            style={styles.checkbox}
+            onPress={() => handleSelectOrder(item.id)}
+          >
+            <Ionicons
+              name={isSelected ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={isSelected ? '#34A853' : '#9CA3AF'}
+            />
+          </TouchableOpacity>
           <View style={styles.orderInfo}>
             <View style={styles.orderTypeRow}>
               <Ionicons name={getWasteTypeIcon(item.wasteType)} size={20} color="#34A853" />
@@ -206,13 +263,6 @@ const OrderHistory = ({ navigation }) => {
         )}
 
         <View style={styles.orderActions}>
-          <TouchableOpacity 
-            style={styles.viewDetailsButton}
-            onPress={() => navigation.navigate('OrderDetails', { orderId: item.id })}
-          >
-            <Text style={styles.viewDetailsText}>Details</Text>
-          </TouchableOpacity>
-
           {canReorder && (
             <TouchableOpacity style={styles.reorderButton} onPress={() => handleReorder(item)}>
               <Ionicons name="refresh" size={16} color="#34A853" />
@@ -238,25 +288,41 @@ const OrderHistory = ({ navigation }) => {
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <Ionicons name="basket-outline" size={64} color="#9CA3AF" />
-      <Text style={styles.emptyStateTitle}>No Orders Yet</Text>
-      <Text style={styles.emptyStateText}>When you place your first pickup order, it will appear here.</Text>
-      <TouchableOpacity 
+      <Text style={styles.emptyStateTitle}>No Paid Orders</Text>
+      <Text style={styles.emptyStateText}>Your successfully paid orders will appear here.</Text>
+      <TouchableOpacity
         style={styles.createOrderButton}
         onPress={() => navigation.navigate('CustomerDashboard')}
       >
-        <Text style={styles.createOrderText}>Create Your First Order</Text>
+        <Text style={styles.createOrderText}>Create an Order</Text>
       </TouchableOpacity>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <SharedHeader 
+      <SharedHeader
         title="Order History"
-        subtitle={`${orders.length} order${orders.length !== 1 ? 's' : ''} total`}
+        subtitle={`${orders.length} paid order${orders.length !== 1 ? 's' : ''}`}
         showBackButton={true}
         showHomeButton={true}
       />
+      {orders.length > 0 && (
+        <View style={styles.bulkActionsBar}>
+          <TouchableOpacity style={styles.selectAllButton} onPress={handleSelectAll}>
+            <Ionicons name={allSelected ? 'checkbox' : 'square-outline'} size={20} color={allSelected ? '#34A853' : '#9CA3AF'} />
+            <Text style={styles.selectAllText}>{allSelected ? 'Unselect All' : 'Select All'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.deleteSelectedButton, selectedOrders.length === 0 && { opacity: 0.5 }]}
+            onPress={handleDeleteSelected}
+            disabled={selectedOrders.length === 0}
+          >
+            <Ionicons name="trash" size={18} color="#fff" />
+            <Text style={styles.deleteSelectedText}>Delete Selected</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <FlatList
         data={orders}
         renderItem={renderOrderItem}
@@ -264,6 +330,7 @@ const OrderHistory = ({ navigation }) => {
         style={styles.ordersList}
         contentContainerStyle={orders.length === 0 ? styles.emptyContainer : styles.listContainer}
         showsVerticalScrollIndicator={false}
+        extraData={selectedOrders}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#34A853']} />
         }
@@ -278,74 +345,73 @@ const styles = StyleSheet.create({
   ordersList: { flex: 1 },
   listContainer: { paddingHorizontal: 16, paddingVertical: 16 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  bulkActionsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#F3F4F6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  selectAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectAllText: {
+    marginLeft: 6,
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '600',
+  },
+  deleteSelectedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EF4444',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginLeft: 12,
+  },
+  deleteSelectedText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 4,
+    fontSize: 14,
+  },
+  checkbox: {
+    marginRight: 10,
+    padding: 2,
+  },
   orderCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFF',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  orderHeader: { flexDirection: 'row', alignItems: 'flex-start' },
   orderInfo: { flex: 1 },
   orderTypeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   orderType: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginLeft: 8 },
-  orderVolume: { fontSize: 14, color: '#6B7280', marginBottom: 4 },
+  orderVolume: { fontSize: 14, color: '#4B5563', marginBottom: 2 },
   orderDate: { fontSize: 12, color: '#9CA3AF' },
   orderStatus: { alignItems: 'flex-end' },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginBottom: 4 },
-  statusText: { fontSize: 12, color: '#FFFFFF', fontWeight: '600' },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 4 },
+  statusText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
   orderPrice: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
-  addressSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  addressText: { fontSize: 14, color: '#6B7280', marginLeft: 6, flex: 1 },
-  orderActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  viewDetailsButton: {
-    flex: 1.5,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-  },
+  addressSection: { flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  addressText: { fontSize: 14, color: '#4B5563', marginLeft: 6 },
+  orderActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, alignItems: 'center' },
+  viewDetailsButton: { flex: 1, paddingVertical: 8, marginRight: 8, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8 },
   viewDetailsText: { fontSize: 14, color: '#374151', fontWeight: '600', textAlign: 'center' },
-  reorderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0F9F4',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-  },
+  reorderButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F9F4', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, marginRight: 8 },
   reorderText: { fontSize: 14, color: '#34A853', fontWeight: '600', marginLeft: 4 },
-  cancelButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-  },
+  cancelButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, marginRight: 8 },
   cancelText: { fontSize: 14, color: '#EF4444', fontWeight: '600', marginLeft: 4 },
-  deleteButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#FEE2E2',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  deleteButton: { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#FEE2E2', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   emptyState: { alignItems: 'center', paddingHorizontal: 32 },
   emptyStateTitle: { fontSize: 20, fontWeight: 'bold', color: '#1F2937', marginTop: 16, marginBottom: 8 },
   emptyStateText: { fontSize: 16, color: '#6B7280', textAlign: 'center', lineHeight: 24, marginBottom: 24 },
