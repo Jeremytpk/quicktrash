@@ -11,7 +11,8 @@ import {
   Dimensions,
   FlatList,
   RefreshControl,
-  TextInput
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
@@ -40,16 +41,53 @@ const JobMonitoring = ({ navigation }) => {
   const [selectedJob, setSelectedJob] = useState(null);
   const [showJobModal, setShowJobModal] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [editedAddress, setEditedAddress] = useState({
+    street: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    fullAddress: '',
+  });
 
   // Real-time listener for all jobs
   useEffect(() => {
     const q = query(collection(db, 'jobs'));
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
       const jobs = [];
-      querySnapshot.forEach((doc) => {
-        jobs.push({ id: doc.id, ...doc.data() });
-      });
+      
+      // Fetch all jobs with user names
+      for (const docSnapshot of querySnapshot.docs) {
+        const jobData = { id: docSnapshot.id, ...docSnapshot.data() };
+        
+        // Fetch customer name
+        try {
+          const customerRef = doc(db, 'users', jobData.customerId);
+          const customerSnap = await getDoc(customerRef);
+          jobData.customerName = customerSnap.exists() ? customerSnap.data().displayName : 'N/A';
+        } catch (error) {
+          console.error('Error fetching customer name:', error);
+          jobData.customerName = 'N/A';
+        }
+        
+        // Fetch contractor name if applicable
+        if (jobData.contractorId) {
+          try {
+            const contractorRef = doc(db, 'users', jobData.contractorId);
+            const contractorSnap = await getDoc(contractorRef);
+            jobData.contractorName = contractorSnap.exists() ? contractorSnap.data().displayName : 'N/A';
+          } catch (error) {
+            console.error('Error fetching contractor name:', error);
+            jobData.contractorName = 'N/A';
+          }
+        } else {
+          jobData.contractorName = 'Unassigned';
+        }
+        
+        jobs.push(jobData);
+      }
+      
       jobs.sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
       setAllJobs(jobs);
       setLoading(false);
@@ -64,43 +102,12 @@ const JobMonitoring = ({ navigation }) => {
     return () => unsubscribe();
   }, []);
 
-  // Effect to fetch user display names for all jobs
-  useEffect(() => {
-    const fetchUserNames = async () => {
-      const updatedJobs = await Promise.all(allJobs.map(async (job) => {
-        // Fetch customer name
-        const customerRef = doc(db, 'users', job.customerId);
-        const customerSnap = await getDoc(customerRef);
-        const customerName = customerSnap.exists() ? customerSnap.data().displayName : 'N/A';
-        
-        // Fetch contractor name if applicable
-        let contractorName = 'Unassigned';
-        if (job.contractorId) {
-          const contractorRef = doc(db, 'users', job.contractorId);
-          const contractorSnap = await getDoc(contractorRef);
-          contractorName = contractorSnap.exists() ? contractorSnap.data().displayName : 'N/A';
-        }
-
-        return {
-          ...job,
-          customerName,
-          contractorName,
-        };
-      }));
-      setAllJobs(updatedJobs);
-    };
-
-    if (allJobs.length > 0) {
-      fetchUserNames();
-    }
-  }, [allJobs.length]); // This dependency ensures this effect only runs when new jobs are added
-
   const onRefresh = () => {
     setRefreshing(true);
     // The onSnapshot listener handles the refresh automatically
   };
 
-  const handleJobPress = (job) => {
+  const handleJobPress = async (job) => {
     if (multiSelectMode) {
       if (selectedJobIds.includes(job.id)) {
         setSelectedJobIds(selectedJobIds.filter((id) => id !== job.id));
@@ -108,7 +115,29 @@ const JobMonitoring = ({ navigation }) => {
         setSelectedJobIds([...selectedJobIds, job.id]);
       }
     } else {
-      setSelectedJob(job);
+      // Ensure we have the latest contractor name
+      let jobWithContractor = { ...job };
+      if (job.contractorId && (!job.contractorName || job.contractorName === 'N/A')) {
+        try {
+          const contractorRef = doc(db, 'users', job.contractorId);
+          const contractorSnap = await getDoc(contractorRef);
+          if (contractorSnap.exists()) {
+            jobWithContractor.contractorName = contractorSnap.data().displayName || 'N/A';
+          }
+        } catch (error) {
+          console.error('Error fetching contractor name:', error);
+        }
+      }
+      setSelectedJob(jobWithContractor);
+      // Initialize edit fields with current values
+      setEditedAddress({
+        street: jobWithContractor.pickupAddress?.street || '',
+        city: jobWithContractor.pickupAddress?.city || '',
+        state: jobWithContractor.pickupAddress?.state || '',
+        zipCode: jobWithContractor.pickupAddress?.zipCode || '',
+        fullAddress: jobWithContractor.pickupAddress?.fullAddress || '',
+      });
+      setIsEditingLocation(false);
       setShowJobModal(true);
     }
   };
@@ -195,6 +224,59 @@ const JobMonitoring = ({ navigation }) => {
         },
       ]
     );
+  };
+
+  const handleSaveLocation = async () => {
+    if (!selectedJob) return;
+
+    // Validate required fields
+    if (!editedAddress.street.trim() || !editedAddress.city.trim()) {
+      Alert.alert('Required Fields', 'Street and City are required fields.');
+      return;
+    }
+
+    try {
+      const jobRef = doc(db, 'jobs', selectedJob.id);
+      const updatedAddress = {
+        street: editedAddress.street.trim(),
+        city: editedAddress.city.trim(),
+        state: editedAddress.state.trim(),
+        zipCode: editedAddress.zipCode.trim(),
+        fullAddress: `${editedAddress.street.trim()}, ${editedAddress.city.trim()}${editedAddress.state ? ', ' + editedAddress.state.trim() : ''}${editedAddress.zipCode ? ' ' + editedAddress.zipCode.trim() : ''}`,
+      };
+
+      await updateDoc(jobRef, {
+        pickupAddress: updatedAddress,
+        lastModified: serverTimestamp(),
+        modifiedBy: auth.currentUser?.uid || 'unknown_employee',
+      });
+
+      // Update local state
+      setSelectedJob({
+        ...selectedJob,
+        pickupAddress: updatedAddress,
+      });
+
+      setIsEditingLocation(false);
+      Alert.alert('Success', 'Location has been updated successfully.');
+    } catch (error) {
+      console.error('Error updating location:', error);
+      Alert.alert('Error', 'Failed to update location. Please try again.');
+    }
+  };
+
+  const handleCancelLocationEdit = () => {
+    // Reset to original values
+    if (selectedJob) {
+      setEditedAddress({
+        street: selectedJob.pickupAddress?.street || '',
+        city: selectedJob.pickupAddress?.city || '',
+        state: selectedJob.pickupAddress?.state || '',
+        zipCode: selectedJob.pickupAddress?.zipCode || '',
+        fullAddress: selectedJob.pickupAddress?.fullAddress || '',
+      });
+    }
+    setIsEditingLocation(false);
   };
 
   // Helper function to render job cards
@@ -388,8 +470,14 @@ const JobMonitoring = ({ navigation }) => {
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
             <Ionicons name="briefcase-outline" size={64} color="#9CA3AF" />
-            <Text style={styles.emptyText}>No active jobs to display.</Text>
-            {loading && <Text style={styles.loadingText}>Loading...</Text>}
+            {loading ? (
+              <>
+                <Text style={styles.loadingText}>Loading job information...</Text>
+                <Text style={styles.emptyText}>Please wait</Text>
+              </>
+            ) : (
+              <Text style={styles.emptyText}>No active jobs to display.</Text>
+            )}
           </View>
         )}
       />
@@ -424,10 +512,101 @@ const JobMonitoring = ({ navigation }) => {
                 </View>
 
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailHeader}>Customer & Location</Text>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.detailHeader}>Customer & Location</Text>
+                    {!isEditingLocation ? (
+                      <TouchableOpacity 
+                        onPress={() => setIsEditingLocation(true)}
+                        style={styles.editButton}
+                      >
+                        <Ionicons name="pencil" size={18} color="#1E88E5" />
+                        <Text style={styles.editButtonText}>Edit</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.editActions}>
+                        <TouchableOpacity 
+                          onPress={handleCancelLocationEdit}
+                          style={styles.cancelEditButton}
+                        >
+                          <Ionicons name="close" size={18} color="#EF4444" />
+                          <Text style={styles.cancelEditButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          onPress={handleSaveLocation}
+                          style={styles.saveButton}
+                        >
+                          <Ionicons name="checkmark" size={18} color="#34A853" />
+                          <Text style={styles.saveButtonText}>Save</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                  
                   <Text style={styles.detailText}>Customer: {selectedJob.customerName || 'N/A'}</Text>
-                  <Text style={styles.detailText}>Address: {selectedJob.pickupAddress?.street || 'N/A'}</Text>
-                  <Text style={styles.detailText}>City: {selectedJob.pickupAddress?.city || 'N/A'}</Text>
+                  
+                  {!isEditingLocation ? (
+                    <>
+                      <Text style={styles.detailText}>Address: {selectedJob.pickupAddress?.street || 'N/A'}</Text>
+                      <Text style={styles.detailText}>City: {selectedJob.pickupAddress?.city || 'N/A'}</Text>
+                      {selectedJob.pickupAddress?.state && (
+                        <Text style={styles.detailText}>State: {selectedJob.pickupAddress.state}</Text>
+                      )}
+                      {selectedJob.pickupAddress?.zipCode && (
+                        <Text style={styles.detailText}>Zip Code: {selectedJob.pickupAddress.zipCode}</Text>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.editFormContainer}>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Street Address *</Text>
+                        <TextInput
+                          style={styles.editInput}
+                          placeholder="Enter street address"
+                          value={editedAddress.street}
+                          onChangeText={(text) => setEditedAddress({ ...editedAddress, street: text })}
+                        />
+                      </View>
+                      
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>City *</Text>
+                        <TextInput
+                          style={styles.editInput}
+                          placeholder="Enter city"
+                          value={editedAddress.city}
+                          onChangeText={(text) => setEditedAddress({ ...editedAddress, city: text })}
+                        />
+                      </View>
+                      
+                      <View style={styles.inputRow}>
+                        <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                          <Text style={styles.inputLabel}>State</Text>
+                          <TextInput
+                            style={styles.editInput}
+                            placeholder="State"
+                            value={editedAddress.state}
+                            onChangeText={(text) => setEditedAddress({ ...editedAddress, state: text })}
+                            maxLength={2}
+                            autoCapitalize="characters"
+                          />
+                        </View>
+                        
+                        <View style={[styles.inputGroup, { flex: 1 }]}>
+                          <Text style={styles.inputLabel}>Zip Code</Text>
+                          <TextInput
+                            style={styles.editInput}
+                            placeholder="Zip"
+                            value={editedAddress.zipCode}
+                            onChangeText={(text) => setEditedAddress({ ...editedAddress, zipCode: text })}
+                            keyboardType="numeric"
+                            maxLength={10}
+                          />
+                        </View>
+                      </View>
+                      
+                      <Text style={styles.requiredNote}>* Required fields</Text>
+                    </View>
+                  )}
+                  
                   <TouchableOpacity style={styles.contactButton}>
                     <Ionicons name="call" size={18} color="#FFFFFF" />
                     <Text style={styles.contactButtonText}>Call Customer</Text>
@@ -597,11 +776,93 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   detailHeader: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#1F2937',
-    marginBottom: 10,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+    gap: 4,
+  },
+  editButtonText: {
+    color: '#1E88E5',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  cancelEditButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    gap: 4,
+  },
+  cancelEditButtonText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 8,
+    gap: 4,
+  },
+  saveButtonText: {
+    color: '#34A853',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  editFormContainer: {
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  editInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  inputRow: {
+    flexDirection: 'row',
+  },
+  requiredNote: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   detailText: {
     fontSize: 14,

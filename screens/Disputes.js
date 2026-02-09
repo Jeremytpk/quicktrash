@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
 import { db } from '../firebaseConfig';
-import { collection, query, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, getDoc, where } from 'firebase/firestore';
 
 const Disputes = ({ navigation }) => {
   const [disputes, setDisputes] = useState([]);
@@ -87,11 +87,8 @@ const Disputes = ({ navigation }) => {
     try {
       setLoading(true);
       
-      // Fetch disputes from Firebase
-      const disputesQuery = query(
-        collection(db, 'disputes'),
-        orderBy('createdAt', 'desc')
-      );
+      // Fetch disputes from Firebase without orderBy to avoid composite index requirement
+      const disputesQuery = query(collection(db, 'disputes'));
       
       const snapshot = await getDocs(disputesQuery);
       const disputesData = [];
@@ -127,6 +124,9 @@ const Disputes = ({ navigation }) => {
         });
       }
       
+      // Sort disputes by createdAt in descending order (newest first) in JavaScript
+      disputesData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      
       setDisputes(disputesData);
       setFilteredDisputes(disputesData);
       
@@ -144,12 +144,11 @@ const Disputes = ({ navigation }) => {
     try {
       if (!userId) return null;
       
-      const userDoc = await getDocs(
-        query(collection(db, 'users'), where('__name__', '==', userId))
-      );
+      const userDocRef = doc(db, 'users', userId);
+      const userDoc = await getDoc(userDocRef);
       
-      if (!userDoc.empty) {
-        return userDoc.docs[0].data().displayName;
+      if (userDoc.exists()) {
+        return userDoc.data().displayName;
       }
       return null;
     } catch (error) {
@@ -162,12 +161,11 @@ const Disputes = ({ navigation }) => {
     try {
       if (!jobId) return null;
       
-      const jobDoc = await getDocs(
-        query(collection(db, 'jobs'), where('__name__', '==', jobId))
-      );
+      const jobDocRef = doc(db, 'jobs', jobId);
+      const jobDoc = await getDoc(jobDocRef);
       
-      if (!jobDoc.empty) {
-        return jobDoc.docs[0].data();
+      if (jobDoc.exists()) {
+        return jobDoc.data();
       }
       return null;
     } catch (error) {

@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   Image,
+  Modal,
 } from 'react-native'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
@@ -23,6 +24,8 @@ const Login = ({ navigation, route }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordVisible, setPasswordVisible] = useState(false); // New state for password visibility
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const userRole = route.params?.userRole || 'customer'
   const { setUserRole } = useUser()
 
@@ -71,8 +74,38 @@ const Login = ({ navigation, route }) => {
       navigation.navigate('Transit');
 
     } catch (error) {
-      Alert.alert('Login Failed', error.message);
       console.error(error);
+      
+      // Map Firebase error codes to user-friendly messages
+      let userFriendlyMessage = '';
+      switch (error.code) {
+        case 'auth/invalid-email':
+          userFriendlyMessage = 'The email address is not valid. Please check and try again.';
+          break;
+        case 'auth/user-disabled':
+          userFriendlyMessage = 'This account has been disabled. Please contact support.';
+          break;
+        case 'auth/user-not-found':
+          userFriendlyMessage = 'No account found with this email. Please sign up first.';
+          break;
+        case 'auth/wrong-password':
+          userFriendlyMessage = 'The password is incorrect. Please try again.';
+          break;
+        case 'auth/invalid-credential':
+          userFriendlyMessage = 'Invalid email or password. Please check your credentials and try again.';
+          break;
+        case 'auth/too-many-requests':
+          userFriendlyMessage = 'Too many failed login attempts. Please try again later.';
+          break;
+        case 'auth/network-request-failed':
+          userFriendlyMessage = 'Network error. Please check your internet connection.';
+          break;
+        default:
+          userFriendlyMessage = 'Login failed. Please check your email and password.';
+      }
+      
+      setErrorMessage(userFriendlyMessage);
+      setShowErrorModal(true);
     }
   }
 
@@ -120,6 +153,30 @@ const Login = ({ navigation, route }) => {
       <TouchableOpacity onPress={() => navigation.navigate('RoleSelection')}>
         <Text style={styles.link}>Don't have an account? Sign Up</Text>
       </TouchableOpacity>
+
+      {/* Error Modal */}
+      <Modal
+        visible={showErrorModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowErrorModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <Ionicons name="alert-circle" size={60} color="#EF4444" />
+            </View>
+            <Text style={styles.modalTitle}>Login Failed</Text>
+            <Text style={styles.modalMessage}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setShowErrorModal(false)}
+            >
+              <Text style={styles.modalButtonText}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   )
 }
@@ -209,6 +266,65 @@ const styles = StyleSheet.create({
     color: '#34A853',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '85%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  modalIconContainer: {
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 22,
+  },
+  modalButton: {
+    width: '100%',
+    height: 50,
+    backgroundColor: '#34A853',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 })
 

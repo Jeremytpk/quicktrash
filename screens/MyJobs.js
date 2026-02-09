@@ -10,6 +10,7 @@ import {
   Modal,
   ScrollView,
   Platform,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
@@ -25,7 +26,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 
-const MyJobs = () => {
+const MyJobs = ({ navigation, route }) => {
   const { user, contractorId } = useUser();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,20 +35,39 @@ const MyJobs = () => {
   const [showJobDetails, setShowJobDetails] = useState(false);
   const [filter, setFilter] = useState('active'); // active, completed, all
 
+  // Handle auto-opening job details when navigated from another screen
+  useEffect(() => {
+    if (route.params?.jobId && route.params?.autoOpen && jobs.length > 0) {
+      const job = jobs.find(j => j.id === route.params.jobId);
+      if (job) {
+        setSelectedJob(job);
+        setShowJobDetails(true);
+        // Clear the params to prevent reopening on subsequent renders
+        navigation.setParams({ jobId: undefined, autoOpen: undefined });
+      }
+    }
+  }, [route.params?.jobId, route.params?.autoOpen, jobs, navigation]);
+
   // Fetch jobs for the logged-in contractor from Firestore
   useEffect(() => {
     if (!user) return;
+    
+    // Use user.uid as the contractor ID (contractors are identified by their user ID)
+    const effectiveContractorId = contractorId || user.uid;
+    
     setLoading(true);
     const jobsRef = collection(db, 'jobs');
     const q = query(
       jobsRef,
-      where('contractorId', '==', contractorId),
-      where('status', '==', 'accepted')
+      where('contractorId', '==', effectiveContractorId)
     );
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       let jobsList = [];
+      console.log('MyJobs: Query snapshot size:', querySnapshot.size);
+      console.log('MyJobs: Querying with contractorId:', effectiveContractorId);
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        console.log('MyJobs: Job data:', { id: doc.id, status: data.status, contractorId: data.contractorId });
         jobsList.push({
           id: doc.id,
           ...data,
@@ -55,32 +75,56 @@ const MyJobs = () => {
           scheduledTime: data.scheduledTime?.toDate ? data.scheduledTime.toDate() : data.scheduledTime,
           acceptedAt: data.acceptedAt?.toDate ? data.acceptedAt.toDate() : data.acceptedAt,
           completedAt: data.completedAt?.toDate ? data.completedAt.toDate() : data.completedAt,
+          // Add default values for missing fields
+          customerName: data.customerName || 'Customer',
+          wasteType: data.wasteType || 'General Waste',
+          volume: data.volume || 'N/A',
+          location: data.location || data.pickupAddress || { address: 'Address not available' },
+          contractorEarnings: data.pricing?.contractorPayout || data.contractorEarnings || 0,
+          distance: data.distance || 'N/A',
         });
       });
-      // Filter by UI filter
+      console.log('MyJobs: Total jobs fetched:', jobsList.length);
+      // Filter by UI filter - only show accepted and beyond statuses
       const filteredJobs = jobsList.filter(job => {
+        const jobStatus = (job.status || '').toLowerCase();
+        const validStatuses = ['accepted', 'scheduled', 'in_progress', 'completed'];
+        
+        // Check if status is valid
+        if (!validStatuses.includes(jobStatus)) {
+          console.log('MyJobs: Job filtered out - invalid status:', job.status, 'Job ID:', job.id);
+          return false;
+        }
+        
         switch (filter) {
           case 'active':
-            return ['scheduled', 'in_progress'].includes(job.status);
+            const isActive = ['accepted', 'scheduled', 'in_progress'].includes(jobStatus);
+            console.log('MyJobs: Active filter - Job:', job.id, 'Status:', jobStatus, 'Included:', isActive);
+            return isActive;
           case 'completed':
-            return job.status === 'completed';
+            const isCompleted = jobStatus === 'completed';
+            console.log('MyJobs: Completed filter - Job:', job.id, 'Status:', jobStatus, 'Included:', isCompleted);
+            return isCompleted;
           default:
             return true;
         }
       });
+      console.log('MyJobs: Filtered jobs:', filteredJobs.length, 'Filter:', filter);
       setJobs(filteredJobs);
       setLoading(false);
       setRefreshing(false);
     }, (error) => {
+      console.error('Error fetching jobs:', error);
       setLoading(false);
       setRefreshing(false);
       Alert.alert('Error', 'Failed to fetch jobs.');
     });
     return () => unsubscribe();
-  }, [user, filter]);
+  }, [user, contractorId, filter]);
 
   const getStatusColor = (status) => {
     switch (status) {
+      case 'accepted': return '#8B5CF6';
       case 'scheduled': return '#3B82F6';
       case 'in_progress': return '#F59E0B';
       case 'completed': return '#34A853';
@@ -90,6 +134,7 @@ const MyJobs = () => {
 
   const getStatusText = (status) => {
     switch (status) {
+      case 'accepted': return 'Accepted';
       case 'scheduled': return 'Scheduled';
       case 'in_progress': return 'In Progress';
       case 'completed': return 'Completed';
@@ -178,15 +223,17 @@ const MyJobs = () => {
     >
       <View style={styles.jobHeader}>
         <View style={styles.jobInfo}>
-          <Text style={styles.customerName}>{item.customerName}</Text>
+          <Text style={styles.customerName}>{item.customerName || 'Customer'}</Text>
           <Text style={styles.jobType}>
-            {item.wasteType.charAt(0).toUpperCase() + item.wasteType.slice(1)} • {item.volume}
+            {(item.wasteType || 'Waste')?.charAt(0).toUpperCase() + (item.wasteType || 'waste').slice(1)} • {item.volume || 'N/A'}
           </Text>
-          <Text style={styles.jobLocation}>{item.location.address}</Text>
+          <Text style={styles.jobLocation}>
+            {item.location?.address || item.pickupAddress?.street || item.pickupAddress?.fullAddress || 'Location not available'}
+          </Text>
         </View>
         
         <View style={styles.jobMeta}>
-          <Text style={styles.earnings}>${item.contractorEarnings}</Text>
+          <Text style={styles.earnings}>${item.contractorEarnings || item.pricing?.contractorPayout || 0}</Text>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
             <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
               {getStatusText(item.status)}
@@ -200,7 +247,8 @@ const MyJobs = () => {
           <View style={styles.detailItem}>
             <Ionicons name="time-outline" size={16} color="#6B7280" />
             <Text style={styles.detailText}>
-              {item.status === 'scheduled' ? formatTime(item.scheduledTime) : 
+              {item.status === 'accepted' ? formatTime(item.acceptedAt) :
+               item.status === 'scheduled' ? formatTime(item.scheduledTime) : 
                item.status === 'completed' ? formatTime(item.completedAt) :
                'In progress'}
             </Text>
@@ -212,7 +260,7 @@ const MyJobs = () => {
           </View>
         </View>
 
-        {item.status === 'scheduled' && (
+        {(item.status === 'accepted' || item.status === 'scheduled') && (
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => handleStartJob(item.id)}
@@ -277,6 +325,18 @@ const MyJobs = () => {
         }
       />
 
+      {/* Debug Info - Remove after testing */}
+      {__DEV__ && (
+        <View style={{ backgroundColor: '#FFF3E0', padding: 8, marginHorizontal: 16, marginTop: 8, borderRadius: 4 }}>
+          <Text style={{ fontSize: 12, color: '#E65100' }}>
+            Debug: User ID: {user?.uid?.slice(0, 8) || 'N/A'} | Contractor ID: {(contractorId || user?.uid)?.slice(0, 8) || 'N/A'}
+          </Text>
+          <Text style={{ fontSize: 12, color: '#E65100' }}>
+            Jobs found: {jobs.length} | Filter: {filter} | Loading: {loading ? 'Yes' : 'No'}
+          </Text>
+        </View>
+      )}
+
       <FlatList
         data={jobs}
         renderItem={renderJobCard}
@@ -312,6 +372,19 @@ const MyJobs = () => {
             </View>
 
             <ScrollView style={styles.modalContent}>
+              {/* Show welcome banner for newly accepted jobs */}
+              {(selectedJob.status === 'accepted' || selectedJob.status === 'scheduled') && (
+                <View style={styles.welcomeBanner}>
+                  <Ionicons name="checkmark-circle" size={24} color="#34A853" />
+                  <View style={styles.welcomeBannerText}>
+                    <Text style={styles.welcomeBannerTitle}>Job Accepted Successfully!</Text>
+                    <Text style={styles.welcomeBannerSubtitle}>
+                      Get directions and start the pickup when you're ready
+                    </Text>
+                  </View>
+                </View>
+              )}
+
               {/* Customer Info */}
               <View style={styles.modalSection}>
                 <Text style={styles.modalSectionTitle}>Customer</Text>
@@ -349,7 +422,36 @@ const MyJobs = () => {
               <View style={styles.modalSection}>
                 <Text style={styles.modalSectionTitle}>Pickup Location</Text>
                 <Text style={styles.addressText}>{selectedJob.location.address}</Text>
-                <TouchableOpacity style={styles.navigationButton}>
+                <TouchableOpacity 
+                  style={styles.navigationButton}
+                  onPress={() => {
+                    const address = encodeURIComponent(selectedJob.location.address);
+                    const lat = selectedJob.location?.latitude;
+                    const lng = selectedJob.location?.longitude;
+                    
+                    let url;
+                    if (Platform.OS === 'ios') {
+                      // Use Apple Maps on iOS
+                      url = lat && lng 
+                        ? `maps://app?daddr=${lat},${lng}`
+                        : `maps://app?daddr=${address}`;
+                    } else {
+                      // Use Google Maps on Android and Web
+                      url = lat && lng
+                        ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+                        : `https://www.google.com/maps/dir/?api=1&destination=${address}`;
+                    }
+                    
+                    if (Platform.OS === 'web') {
+                      window.open(url, '_blank');
+                    } else {
+                      Linking.openURL(url).catch(err => {
+                        Alert.alert('Error', 'Could not open navigation app');
+                        console.error('Navigation error:', err);
+                      });
+                    }
+                  }}
+                >
                   <Ionicons name="navigate-outline" size={20} color="#3B82F6" />
                   <Text style={styles.navigationButtonText}>Get Directions</Text>
                 </TouchableOpacity>
@@ -372,7 +474,7 @@ const MyJobs = () => {
                   </Text>
                 </View>
 
-                {selectedJob.status === 'scheduled' && (
+                {(selectedJob.status === 'accepted' || selectedJob.status === 'scheduled') && (
                   <TouchableOpacity
                     style={styles.modalActionButton}
                     onPress={() => {
@@ -655,6 +757,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  welcomeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#34A853',
+  },
+  welcomeBannerText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  welcomeBannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1B5E20',
+    marginBottom: 4,
+  },
+  welcomeBannerSubtitle: {
+    fontSize: 14,
+    color: '#2E7D32',
+    lineHeight: 20,
   },
 });
 

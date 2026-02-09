@@ -14,6 +14,7 @@ import {
   Alert,
   Dimensions,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, onSnapshot, query, where, updateDoc, doc } from 'firebase/firestore';
@@ -60,6 +61,9 @@ const ContractorDashboard = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [jobFilter, setJobFilter] = useState('available');
   const isInitialLoad = useRef(true); // Ref to track the first load
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [jobToConfirm, setJobToConfirm] = useState(null);
+  const [isAccepting, setIsAccepting] = useState(false);
 
   const handleJobOffer = useCallback((job) => {
     // Prevent a new pop-up if one is already showing
@@ -177,11 +181,34 @@ const ContractorDashboard = ({ navigation }) => {
     try {
       const jobRef = doc(db, 'jobs', activeJob.id);
       await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: user.uid });
-      Alert.alert('Job Accepted!', `You accepted the ${activeJob.wasteType} pickup job.`);
+      
+      // Close modal first
+      setShowJobModal(false);
+      const acceptedJobId = activeJob.id;
+      const acceptedJobData = activeJob;
+      setActiveJob(null);
+      
+      // Show success and navigate to job details
+      Alert.alert(
+        'Job Accepted!', 
+        `You accepted the ${acceptedJobData.wasteType} pickup job. Let's start the pickup process!`,
+        [
+          {
+            text: 'View Job Details',
+            onPress: () => {
+              // Navigate to MyJobs screen or JobDetails screen
+              // You can pass the job ID and data to the destination screen
+              navigation.navigate('MyJobs', { 
+                jobId: acceptedJobId,
+                autoOpen: true 
+              });
+            }
+          }
+        ]
+      );
     } catch (error) {
       console.error("Error accepting job from modal:", error);
       Alert.alert('Error', 'Could not accept job.');
-    } finally {
       setShowJobModal(false);
       setActiveJob(null);
     }
@@ -196,18 +223,53 @@ const ContractorDashboard = ({ navigation }) => {
 
   const handleAcceptJobFromList = async (job) => {
     if (!user) return;
-    Alert.alert('Accept Job?', `Accept this ${job.wasteType} job for $${job.pricing?.contractorPayout || 'N/A'}?`,
-      [{ text: 'Cancel', style: 'cancel' }, { text: 'Accept Job', onPress: async () => {
-        try {
-          const jobRef = doc(db, 'jobs', job.id);
-          await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: user.uid });
-          Alert.alert('Job Accepted!', `You accepted the ${job.wasteType} pickup job.`);
-        } catch (error) {
-          console.error('Error accepting job:', error);
-          Alert.alert('Error', 'Failed to accept job. Please try again.');
-        }
-      }}]
-    );
+    // Show custom confirmation modal instead of Alert
+    setJobToConfirm(job);
+    setShowConfirmModal(true);
+  };
+
+  const confirmJobAcceptance = async () => {
+    if (!jobToConfirm || !user) return;
+    
+    setIsAccepting(true);
+    try {
+      const jobRef = doc(db, 'jobs', jobToConfirm.id);
+      await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: user.uid });
+      
+      // Close confirmation modal
+      setShowConfirmModal(false);
+      const acceptedJobId = jobToConfirm.id;
+      const acceptedJobData = jobToConfirm;
+      setJobToConfirm(null);
+      setIsAccepting(false);
+      
+      // Show success and navigate to job details
+      Alert.alert(
+        'Job Accepted!', 
+        `You accepted the ${acceptedJobData.wasteType} pickup job. Let's start the pickup process!`,
+        [
+          {
+            text: 'View Job Details',
+            onPress: () => {
+              // Navigate to MyJobs screen with the job details
+              navigation.navigate('MyJobs', { 
+                jobId: acceptedJobId,
+                autoOpen: true 
+              });
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error accepting job:', error);
+      setIsAccepting(false);
+      Alert.alert('Error', 'Failed to accept job. Please try again.');
+    }
+  };
+
+  const cancelJobAcceptance = () => {
+    setShowConfirmModal(false);
+    setJobToConfirm(null);
   };
 
   const handleRejectJobFromList = (job) => {
@@ -270,10 +332,6 @@ const ContractorDashboard = ({ navigation }) => {
           <TouchableOpacity style={styles.acceptJobButton} onPress={() => handleAcceptJobFromList(job)}>
             <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
             <Text style={styles.acceptJobText}>Accept Job</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.acceptJobButton, { backgroundColor: '#1E88E5', marginLeft: 8, flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }]} onPress={() => navigation.navigate('JobDetailsScreen', { jobId: job.id })}>
-            <Ionicons name="eye-outline" size={18} color="#FFFFFF" />
-            <Text style={{ color: '#FFFFFF', fontWeight: '600', marginLeft: 6 }}>View</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -416,6 +474,112 @@ const ContractorDashboard = ({ navigation }) => {
           )}
         </SafeAreaView>
       </Modal>
+
+      {/* 4. Job Acceptance Confirmation Modal */}
+      <Modal 
+        visible={showConfirmModal} 
+        animationType="fade" 
+        transparent={true}
+        onRequestClose={cancelJobAcceptance}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalContainer}>
+            {jobToConfirm && (
+              <>
+                {/* Header with icon */}
+                <View style={styles.confirmModalHeader}>
+                  <View style={styles.confirmIconContainer}>
+                    <Ionicons name="checkmark-circle" size={56} color="#34A853" />
+                  </View>
+                  <Text style={styles.confirmModalTitle}>Accept This Job?</Text>
+                  <Text style={styles.confirmModalSubtitle}>
+                    You're about to accept this pickup request
+                  </Text>
+                </View>
+
+                {/* Job Details Card */}
+                <View style={styles.confirmJobCard}>
+                  <View style={styles.confirmJobRow}>
+                    <View style={styles.confirmJobIcon}>
+                      <Ionicons name="trash-bin" size={24} color="#34A853" />
+                    </View>
+                    <View style={styles.confirmJobInfo}>
+                      <Text style={styles.confirmJobType}>{jobToConfirm.wasteType}</Text>
+                      <Text style={styles.confirmJobVolume}>{jobToConfirm.volume}</Text>
+                    </View>
+                    <View style={styles.confirmJobEarnings}>
+                      <Text style={styles.confirmJobAmount}>
+                        ${jobToConfirm.pricing?.contractorPayout || 'N/A'}
+                      </Text>
+                      <Text style={styles.confirmJobLabel}>Payout</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.confirmJobDivider} />
+
+                  <View style={styles.confirmJobDetails}>
+                    <View style={styles.confirmDetailRow}>
+                      <Ionicons name="location-outline" size={18} color="#6B7280" />
+                      <Text style={styles.confirmDetailText} numberOfLines={2}>
+                        {jobToConfirm.pickupAddress?.fullAddress || 'Address Not Available'}
+                      </Text>
+                    </View>
+                    {jobToConfirm.distance && (
+                      <View style={styles.confirmDetailRow}>
+                        <Ionicons name="navigate-outline" size={18} color="#6B7280" />
+                        <Text style={styles.confirmDetailText}>{jobToConfirm.distance} away</Text>
+                      </View>
+                    )}
+                    {jobToConfirm.customerName && (
+                      <View style={styles.confirmDetailRow}>
+                        <Ionicons name="person-outline" size={18} color="#6B7280" />
+                        <Text style={styles.confirmDetailText}>{jobToConfirm.customerName}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Important Note */}
+                <View style={styles.confirmNoteContainer}>
+                  <Ionicons name="information-circle-outline" size={20} color="#2563EB" />
+                  <Text style={styles.confirmNoteText}>
+                    Once accepted, you'll be guided to start navigation and pickup
+                  </Text>
+                </View>
+
+                {/* Action Buttons */}
+                <View style={styles.confirmActions}>
+                  <TouchableOpacity 
+                    style={[styles.confirmButton, styles.confirmCancelButton]}
+                    onPress={cancelJobAcceptance}
+                    disabled={isAccepting}
+                  >
+                    <Text style={styles.confirmCancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.confirmButton, styles.confirmAcceptButton]}
+                    onPress={confirmJobAcceptance}
+                    disabled={isAccepting}
+                  >
+                    {isAccepting ? (
+                      <>
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                        <Text style={styles.confirmAcceptButtonText}>Accepting...</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                        <Text style={styles.confirmAcceptButtonText}>Accept Job</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -504,6 +668,168 @@ const styles = StyleSheet.create({
     noJobsContainer: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 32 },
     noJobsTitle: { fontSize: 18, fontWeight: '600', color: '#1F2937', marginTop: 16, marginBottom: 8 },
     noJobsText: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 20 },
+    
+    // Confirmation Modal Styles
+    confirmModalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.6)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    confirmModalContainer: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 24,
+      width: '100%',
+      maxWidth: 420,
+      padding: 24,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.2,
+      shadowRadius: 24,
+      elevation: 10,
+    },
+    confirmModalHeader: {
+      alignItems: 'center',
+      marginBottom: 24,
+    },
+    confirmIconContainer: {
+      marginBottom: 16,
+    },
+    confirmModalTitle: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: '#1F2937',
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    confirmModalSubtitle: {
+      fontSize: 15,
+      color: '#6B7280',
+      textAlign: 'center',
+      lineHeight: 22,
+    },
+    confirmJobCard: {
+      backgroundColor: '#F9FAFB',
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: '#E5E7EB',
+    },
+    confirmJobRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    confirmJobIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+      backgroundColor: '#E8F5E9',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    confirmJobInfo: {
+      flex: 1,
+    },
+    confirmJobType: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: '#1F2937',
+      marginBottom: 4,
+      textTransform: 'capitalize',
+    },
+    confirmJobVolume: {
+      fontSize: 14,
+      color: '#6B7280',
+      fontWeight: '500',
+    },
+    confirmJobEarnings: {
+      alignItems: 'flex-end',
+    },
+    confirmJobAmount: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      color: '#34A853',
+      marginBottom: 2,
+    },
+    confirmJobLabel: {
+      fontSize: 12,
+      color: '#6B7280',
+      fontWeight: '500',
+    },
+    confirmJobDivider: {
+      height: 1,
+      backgroundColor: '#E5E7EB',
+      marginBottom: 16,
+    },
+    confirmJobDetails: {
+      gap: 12,
+    },
+    confirmDetailRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+    },
+    confirmDetailText: {
+      flex: 1,
+      fontSize: 14,
+      color: '#374151',
+      lineHeight: 20,
+    },
+    confirmNoteContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#EFF6FF',
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 24,
+      gap: 10,
+    },
+    confirmNoteText: {
+      flex: 1,
+      fontSize: 13,
+      color: '#1E40AF',
+      lineHeight: 18,
+    },
+    confirmActions: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    confirmButton: {
+      flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingVertical: 14,
+      borderRadius: 12,
+      gap: 8,
+    },
+    confirmCancelButton: {
+      backgroundColor: '#F3F4F6',
+      borderWidth: 1,
+      borderColor: '#D1D5DB',
+    },
+    confirmCancelButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#6B7280',
+    },
+    confirmAcceptButton: {
+      backgroundColor: '#34A853',
+      shadowColor: '#34A853',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    confirmAcceptButtonText: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#FFFFFF',
+    },
 });
 
 export default ContractorDashboard;

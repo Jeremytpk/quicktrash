@@ -33,6 +33,35 @@ const PaymentMethods = () => {
           userId: user?.uid
         })
       });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Backend error:', errorText);
+        
+        // Check for specific error types
+        if (errorText.includes('Expired API Key') || errorText.includes('expired')) {
+          Alert.alert(
+            'Service Configuration Error',
+            'The payment service is temporarily unavailable due to configuration issues. Please contact support or try again later.',
+            [{ text: 'OK', style: 'default' }]
+          );
+        } else if (errorText.includes('API Key')) {
+          Alert.alert(
+            'Service Error',
+            'There is a configuration issue with the payment service. Please contact support.',
+            [{ text: 'OK', style: 'default' }]
+          );
+        } else {
+          Alert.alert(
+            'Error',
+            'Failed to create Stripe account. Please try again later or contact support.',
+            [{ text: 'OK', style: 'default' }]
+          );
+        }
+        setCreatingStripeAccount(false);
+        return;
+      }
+      
       const data = await res.json();
       if (data.success && data.onboardingUrl) {
         setOnboardingUrl(data.onboardingUrl);
@@ -57,51 +86,17 @@ const PaymentMethods = () => {
         Alert.alert('Error', data.error || 'Failed to create Stripe account');
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to create Stripe account');
+      console.error('Error creating Stripe account:', err);
+      Alert.alert(
+        'Network Error',
+        'Unable to connect to the payment service. Please check your internet connection and try again.',
+        [{ text: 'OK', style: 'default' }]
+      );
     }
     setCreatingStripeAccount(false);
   };
 
   React.useEffect(() => {
-  const handleCreateStripeAccount = async () => {
-    setCreatingStripeAccount(true);
-    try {
-      const res = await fetch('https://api-bzlaa2cuqa-uc.a.run.app/create-connected-account', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: user?.email,
-          userId: user?.uid
-        })
-      });
-      const data = await res.json();
-      if (data.success && data.onboardingUrl) {
-        setOnboardingUrl(data.onboardingUrl);
-        Alert.alert(
-          'Stripe Onboarding',
-          'You need to complete your Stripe onboarding to receive payouts.',
-          [
-            {
-              text: 'Start Onboarding',
-              onPress: () => {
-                setTimeout(() => {
-                  if (data.onboardingUrl) {
-                    Linking.openURL(data.onboardingUrl);
-                  }
-                }, 300);
-              }
-            },
-            { text: 'Cancel', style: 'cancel' }
-          ]
-        );
-      } else {
-        Alert.alert('Error', data.error || 'Failed to create Stripe account');
-      }
-    } catch (err) {
-      Alert.alert('Error', 'Failed to create Stripe account');
-    }
-    setCreatingStripeAccount(false);
-  };
     const fetchAllMethods = async () => {
       if (!user?.uid) return;
       try {

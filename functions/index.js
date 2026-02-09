@@ -222,6 +222,35 @@ app.post('/contractor-payout', async (req, res) => {
 
     console.log(`Transfer created: ${transfer.id} for $${amount} to account ${stripeAccountId}`);
 
+    // Update all completed jobs for this contractor to mark them as paid out
+    try {
+      const jobsSnapshot = await admin.firestore()
+        .collection('jobs')
+        .where('contractorId', '==', userId)
+        .where('status', '==', 'completed')
+        .get();
+      
+      const batch = admin.firestore().batch();
+      jobsSnapshot.forEach((doc) => {
+        const job = doc.data();
+        // Only update jobs that haven't been paid out yet
+        if (!job.contractorPaidOut) {
+          batch.update(doc.ref, {
+            contractorPaidOut: true,
+            contractorPaidOutAt: admin.firestore.FieldValue.serverTimestamp(),
+            contractorPaidOutAmount: job.pricing?.contractorPayout || 0,
+            transferId: transfer.id
+          });
+        }
+      });
+      
+      await batch.commit();
+      console.log(`Marked ${jobsSnapshot.size} jobs as paid out for contractor ${userId}`);
+    } catch (firestoreError) {
+      console.error('Error updating job payout status:', firestoreError);
+      // Don't fail the whole request if Firestore update fails
+    }
+
     // Try to trigger an instant payout from their Connect account balance to their bank/card
     try {
       const payout = await stripe.payouts.create(
@@ -650,6 +679,10 @@ app.post('/withdraw-to-card', async (req, res) => {
           method: 'standard',
           statement_descriptor: 'QuickTrash Withdraw',
           destination: externalAccount.id,
+          metadata: {
+            userId: userId,
+            type: 'contractor_withdrawal'
+          }
         });
       } catch (err) {
         console.error('Error creating payout:', err);
@@ -657,6 +690,37 @@ app.post('/withdraw-to-card', async (req, res) => {
       }
 
       await ref.update({ status: 'completed', stripePayoutId: payout.id });
+
+      // Mark all completed jobs for this contractor as paid out (when contractor withdraws)
+      try {
+        const jobsSnapshot = await admin.firestore()
+          .collection('jobs')
+          .where('contractorId', '==', userId)
+          .where('status', '==', 'completed')
+          .get();
+        
+        const batch = admin.firestore().batch();
+        jobsSnapshot.forEach((doc) => {
+          const job = doc.data();
+          // Only update jobs that haven't been paid out yet
+          if (!job.contractorPaidOut) {
+            batch.update(doc.ref, {
+              contractorPaidOut: true,
+              contractorPaidOutAt: admin.firestore.FieldValue.serverTimestamp(),
+              contractorPaidOutAmount: job.pricing?.contractorPayout || 0,
+              contractorWithdrawalPayoutId: payout.id,
+              withdrawalMethod: 'contractor_self_withdrawal'
+            });
+          }
+        });
+        
+        await batch.commit();
+        console.log(`Marked ${jobsSnapshot.size} jobs as paid out for contractor ${userId} via self-withdrawal`);
+      } catch (firestoreError) {
+        console.error('Error updating job payout status after withdrawal:', firestoreError);
+        // Don't fail the whole request if Firestore update fails
+      }
+
       return res.json({ payout, method: 'direct_card' });
     }
 
@@ -716,7 +780,7 @@ app.get('/webhook', (req, res) => {
 // Stripe webhook endpoint
 // Jey's Fix: Route is now '/webhook' (removed redundant /api prefix)
 // URL: /api/webhook (requires POST)
-app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
   
@@ -735,6 +799,42 @@ app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
     case 'payment_intent.succeeded':
       const paymentIntent = event.data.object;
       console.log('PaymentIntent was successful:', paymentIntent.id);
+      break;
+    case 'payout.paid':
+      // When a payout is successfully paid (contractor withdrawal completed)
+      const payout = event.data.object;
+      console.log('Payout was successful:', payout.id);
+      
+      // If this was a contractor self-withdrawal, ensure jobs are marked as paid
+      if (payout.metadata && payout.metadata.userId) {
+        const contractorUserId = payout.metadata.userId;
+        try {
+          const jobsSnapshot = await admin.firestore()
+            .collection('jobs')
+            .where('contractorId', '==', contractorUserId)
+            .where('status', '==', 'completed')
+            .where('contractorPaidOut', '==', false)
+            .get();
+          
+          if (!jobsSnapshot.empty) {
+            const batch = admin.firestore().batch();
+            jobsSnapshot.forEach((doc) => {
+              batch.update(doc.ref, {
+                contractorPaidOut: true,
+                contractorPaidOutAt: admin.firestore.FieldValue.serverTimestamp(),
+                contractorPaidOutAmount: doc.data().pricing?.contractorPayout || 0,
+                contractorWithdrawalPayoutId: payout.id,
+                withdrawalMethod: 'contractor_self_withdrawal_webhook'
+              });
+            });
+            
+            await batch.commit();
+            console.log(`Webhook: Marked ${jobsSnapshot.size} jobs as paid out for contractor ${contractorUserId}`);
+          }
+        } catch (firestoreError) {
+          console.error('Webhook: Error updating job payout status after payout.paid:', firestoreError);
+        }
+      }
       break;
     default:
       console.log(`Unhandled event type ${event.type}`);
@@ -801,6 +901,291 @@ app.post('/request-stripe-remediation-link', async (req, res) => {
     res.json({ success: true, url: accountLink.url });
   } catch (err) {
     console.error('Error creating Stripe remediation link:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- LIST STRIPE TRANSACTIONS ---
+// Fetches balance transactions and platform balance from Stripe
+// URL: /api/list-transactions
+app.get('/list-transactions', async (req, res) => {
+  try {
+    const { limit = '50', starting_after, type } = req.query;
+
+    // Build params for balance transactions list
+    const listParams = { limit: Math.min(parseInt(limit, 10) || 50, 100) };
+    if (starting_after) listParams.starting_after = starting_after;
+    if (type) listParams.type = type;
+
+    // Fetch balance transactions and platform balance in parallel
+    const [txnResponse, balance] = await Promise.all([
+      stripe.balanceTransactions.list(listParams),
+      stripe.balance.retrieve(),
+    ]);
+
+    const transactions = txnResponse.data.map((txn) => ({
+      id: txn.id,
+      type: txn.type,
+      amount: txn.amount / 100,
+      net: txn.net / 100,
+      fee: txn.fee / 100,
+      currency: txn.currency,
+      status: txn.status,
+      description: txn.description,
+      created: txn.created,
+    }));
+
+    const available = (balance.available || [])
+      .filter((b) => b.currency === 'usd')
+      .reduce((sum, b) => sum + (b.amount || 0), 0) / 100;
+
+    const pending = (balance.pending || [])
+      .filter((b) => b.currency === 'usd')
+      .reduce((sum, b) => sum + (b.amount || 0), 0) / 100;
+
+    res.json({
+      success: true,
+      transactions,
+      has_more: txnResponse.has_more,
+      balance: { available, pending },
+    });
+  } catch (err) {
+    console.error('list-transactions error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- TRANSACTION DETAILS ---
+// Fetches full details for a single balance transaction, including receiver name and job info
+// URL: /api/transaction-details?id=txn_xxx
+app.get('/transaction-details', async (req, res) => {
+  try {
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ success: false, error: 'id query param required' });
+
+    // Retrieve the balance transaction with expanded source
+    const txn = await stripe.balanceTransactions.retrieve(id, {
+      expand: ['source'],
+    });
+
+    const details = {
+      id: txn.id,
+      type: txn.type,
+      amount: txn.amount / 100,
+      net: txn.net / 100,
+      fee: txn.fee / 100,
+      currency: txn.currency,
+      status: txn.status,
+      description: txn.description,
+      created: txn.created,
+      receiver: null,
+      jobInfo: null,
+    };
+
+    const source = txn.source;
+
+    // Handle transfer type — look up contractor name and job
+    if (source && typeof source === 'object' && source.object === 'transfer') {
+      const transfer = source;
+      details.stripeTransferId = transfer.id;
+      details.destinationAccount = transfer.destination;
+
+      const userId = transfer.metadata?.userId;
+
+      // Look up contractor name from Firestore
+      if (userId) {
+        try {
+          const userDoc = await admin.firestore().collection('users').doc(userId).get();
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            details.receiver = {
+              userId,
+              name: userData.displayName || userData.email || userId,
+              email: userData.email || null,
+            };
+          }
+        } catch (e) {
+          console.log('Could not fetch user for transfer:', e.message);
+        }
+
+        // Look up jobs assigned to this contractor that match the transfer amount
+        try {
+          const jobsSnap = await admin.firestore().collection('jobs')
+            .where('contractorId', '==', userId)
+            .get();
+          const matchingJobs = [];
+          jobsSnap.forEach((jDoc) => {
+            const j = jDoc.data();
+            matchingJobs.push({
+              jobId: jDoc.id,
+              status: j.status || 'unknown',
+              wasteType: j.wasteType || j.pricing?.wasteType || null,
+              address: j.address || j.pickupAddress || null,
+              total: j.pricing?.total || 0,
+              contractorPayout: j.pricing?.contractorPayout || 0,
+              createdAt: j.createdAt || null,
+              customerName: j.customerName || null,
+            });
+          });
+          details.jobInfo = matchingJobs;
+        } catch (e) {
+          console.log('Could not fetch jobs for transfer:', e.message);
+        }
+      }
+    }
+
+    // Handle charge type — look up payment intent metadata for job/customer info
+    if (source && typeof source === 'object' && source.object === 'charge') {
+      const charge = source;
+      details.stripeChargeId = charge.id;
+
+      const orderId = charge.metadata?.orderId || charge.payment_intent?.metadata?.orderId;
+      const customerId = charge.metadata?.customerId || charge.payment_intent?.metadata?.customerId;
+
+      // Look up customer
+      if (customerId && customerId !== 'guest') {
+        try {
+          const userDoc = await admin.firestore().collection('users').doc(customerId).get();
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            details.receiver = {
+              userId: customerId,
+              name: userData.displayName || userData.email || customerId,
+              email: userData.email || null,
+              role: 'customer',
+            };
+          }
+        } catch (e) {
+          console.log('Could not fetch customer for charge:', e.message);
+        }
+      }
+
+      // Look up job/order
+      if (orderId && orderId !== 'unknown') {
+        try {
+          const jobDoc = await admin.firestore().collection('jobs').doc(orderId).get();
+          if (jobDoc.exists) {
+            const j = jobDoc.data();
+            details.jobInfo = [{
+              jobId: orderId,
+              status: j.status || 'unknown',
+              wasteType: j.wasteType || j.pricing?.wasteType || null,
+              address: j.address || j.pickupAddress || null,
+              total: j.pricing?.total || 0,
+              contractorPayout: j.pricing?.contractorPayout || 0,
+              createdAt: j.createdAt || null,
+              customerName: j.customerName || null,
+            }];
+          }
+        } catch (e) {
+          console.log('Could not fetch job for charge:', e.message);
+        }
+      }
+    }
+
+    // Handle payout type
+    if (source && typeof source === 'object' && source.object === 'payout') {
+      details.payoutMethod = source.type || null;
+      details.arrivalDate = source.arrival_date || null;
+      details.payoutStatus = source.status || null;
+    }
+
+    res.json({ success: true, details });
+  } catch (err) {
+    console.error('transaction-details error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- CONTRACTOR TRANSFERS ---
+// Fetches all Stripe transfers for a specific contractor, plus their profile and jobs
+// URL: /api/contractor-transfers?userId=xxx
+app.get('/contractor-transfers', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ success: false, error: 'userId query param required' });
+
+    // Fetch user profile from Firestore
+    const userDoc = await admin.firestore().collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    const userData = userDoc.data();
+    const stripeAccountId = userData.stripeConnectedAccountId;
+
+    const contractor = {
+      userId,
+      name: userData.displayName || userData.email || userId,
+      email: userData.email || null,
+      phone: userData.phone || null,
+      role: userData.role || null,
+      stripeAccountId: stripeAccountId || null,
+    };
+
+    // Fetch Stripe transfers to this contractor's connected account
+    let transfers = [];
+    if (stripeAccountId) {
+      try {
+        let hasMore = true;
+        let startingAfter;
+        while (hasMore) {
+          const params = { destination: stripeAccountId, limit: 100 };
+          if (startingAfter) params.starting_after = startingAfter;
+          const resp = await stripe.transfers.list(params);
+          transfers = transfers.concat(resp.data.map((t) => ({
+            id: t.id,
+            amount: t.amount / 100,
+            currency: t.currency,
+            created: t.created,
+            description: t.description,
+            reversed: t.reversed,
+            metadata: t.metadata || {},
+          })));
+          hasMore = resp.has_more;
+          if (hasMore) startingAfter = resp.data[resp.data.length - 1].id;
+        }
+      } catch (e) {
+        console.log('Could not fetch Stripe transfers:', e.message);
+      }
+    }
+
+    // Fetch jobs assigned to this contractor
+    const jobs = [];
+    try {
+      const jobsSnap = await admin.firestore().collection('jobs')
+        .where('contractorId', '==', userId)
+        .get();
+      jobsSnap.forEach((jDoc) => {
+        const j = jDoc.data();
+        const addr = j.address || j.pickupAddress || null;
+        jobs.push({
+          jobId: jDoc.id,
+          status: j.status || 'unknown',
+          wasteType: j.wasteType || j.pricing?.wasteType || null,
+          address: addr && typeof addr === 'object'
+            ? addr.fullAddress || [addr.street, addr.city, addr.state, addr.zipCode].filter(Boolean).join(', ')
+            : addr,
+          total: j.pricing?.total || 0,
+          contractorPayout: j.pricing?.contractorPayout || 0,
+          createdAt: j.createdAt || null,
+          customerName: j.customerName || null,
+        });
+      });
+    } catch (e) {
+      console.log('Could not fetch jobs for contractor:', e.message);
+    }
+
+    const totalTransferred = transfers.reduce((sum, t) => sum + t.amount, 0);
+
+    res.json({
+      success: true,
+      contractor,
+      transfers,
+      jobs,
+      totalTransferred,
+    });
+  } catch (err) {
+    console.error('contractor-transfers error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

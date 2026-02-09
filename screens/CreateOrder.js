@@ -25,6 +25,7 @@ const CreateOrder = ({ navigation, route }) => {
   const { wasteType } = route.params || {};
   
   const [selectedWasteType, setSelectedWasteType] = useState(wasteType?.id || 'household');
+  const [selectedBagSize, setSelectedBagSize] = useState(null);
   const [selectedVolume, setSelectedVolume] = useState(null);
   const [description, setDescription] = useState('');
   const [pickupLocation, setPickupLocation] = useState(null);
@@ -40,6 +41,14 @@ const CreateOrder = ({ navigation, route }) => {
     { id: 'yard', name: 'Yard Waste', icon: 'leaf', color: '#4CAF50' },
     { id: 'construction', name: 'Construction Debris', icon: 'construct', color: '#795548' },
     { id: 'recyclables', name: 'Recyclables', icon: 'refresh', color: '#2196F3' },
+  ];
+
+  const bagSizes = [
+    { id: 'S', name: 'Small', description: 'Up to 13 gallons', priceMultiplier: 1.0 },
+    { id: 'M', name: 'Medium', description: '13-30 gallons', priceMultiplier: 1.2 },
+    { id: 'L', name: 'Large', description: '30-45 gallons', priceMultiplier: 1.5 },
+    { id: 'XL', name: 'Extra Large', description: '45-60 gallons', priceMultiplier: 1.8 },
+    { id: 'XXL', name: 'XX Large', description: '60+ gallons', priceMultiplier: 2.0 },
   ];
 
   const volumeOptions = [
@@ -71,10 +80,10 @@ const CreateOrder = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
-    if (selectedVolume) {
+    if (selectedVolume && selectedBagSize) {
       calculatePricing();
     }
-  }, [selectedWasteType, selectedVolume]);
+  }, [selectedWasteType, selectedVolume, selectedBagSize]);
 
   const requestLocationPermission = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -113,9 +122,10 @@ const CreateOrder = ({ navigation, route }) => {
 
   const calculatePricing = () => {
     const volumeOption = volumeOptions.find(v => v.id === selectedVolume);
-    if (!volumeOption) return;
+    const bagSize = bagSizes.find(b => b.id === selectedBagSize);
+    if (!volumeOption || !bagSize) return;
 
-    const baseFee = volumeOption.basePrice;
+    const baseFee = volumeOption.basePrice * bagSize.priceMultiplier;
     const serviceFee = Math.round(baseFee * 0.15 * 100) / 100; // 15%
     const disposalFee = Math.round(baseFee * 0.10 * 100) / 100; // 10%
     const total = baseFee + serviceFee + disposalFee;
@@ -153,8 +163,8 @@ const CreateOrder = ({ navigation, route }) => {
   };
 
   const createOrder = async () => {
-    if (!selectedVolume || !pickupLocation) {
-      Alert.alert('Missing Information', 'Please select volume and confirm your pickup location.');
+    if (!selectedVolume || !selectedBagSize || !pickupLocation) {
+      Alert.alert('Missing Information', 'Please select bag size, volume and confirm your pickup location.');
       return;
     }
 
@@ -166,6 +176,7 @@ const CreateOrder = ({ navigation, route }) => {
         status: 'pending',
         
         wasteType: selectedWasteType,
+        bagSize: selectedBagSize,
         volume: selectedVolume,
         description: description.trim(),
         
@@ -233,6 +244,45 @@ const CreateOrder = ({ navigation, route }) => {
                   <Ionicons name={type.icon} size={24} color="#FFFFFF" />
                 </View>
                 <Text style={styles.wasteTypeName}>{type.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Bag Size Selection */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Bag Size</Text>
+          <Text style={styles.sectionSubtitle}>Select the size of your bags</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {bagSizes.map((size) => (
+              <TouchableOpacity
+                key={size.id}
+                style={[
+                  styles.bagSizeCard,
+                  selectedBagSize === size.id && styles.selectedBagSize
+                ]}
+                onPress={() => setSelectedBagSize(size.id)}
+              >
+                <View style={styles.bagSizeHeader}>
+                  <Text style={[
+                    styles.bagSizeId,
+                    selectedBagSize === size.id && styles.selectedBagSizeText
+                  ]}>
+                    {size.id}
+                  </Text>
+                </View>
+                <Text style={[
+                  styles.bagSizeName,
+                  selectedBagSize === size.id && styles.selectedBagSizeText
+                ]}>
+                  {size.name}
+                </Text>
+                <Text style={[
+                  styles.bagSizeDescription,
+                  selectedBagSize === size.id && styles.selectedBagSizeDescText
+                ]}>
+                  {size.description}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -357,9 +407,9 @@ const CreateOrder = ({ navigation, route }) => {
       {/* Create Order Button */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.createButton, (!selectedVolume || !pickupLocation || loading) && styles.createButtonDisabled]}
+          style={[styles.createButton, (!selectedVolume || !selectedBagSize || !pickupLocation || loading) && styles.createButtonDisabled]}
           onPress={createOrder}
-          disabled={!selectedVolume || !pickupLocation || loading}
+          disabled={!selectedVolume || !selectedBagSize || !pickupLocation || loading}
         >
           <Text style={styles.createButtonText}>
             {loading ? 'Creating Order...' : `Create Order${pricing ? ` - $${pricing.total.toFixed(2)}` : ''}`}
@@ -420,6 +470,51 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#374151',
     fontWeight: '500',
+  },
+  bagSizeCard: {
+    alignItems: 'center',
+    marginRight: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    width: 110,
+  },
+  selectedBagSize: {
+    borderColor: '#34A853',
+    backgroundColor: '#34A85310',
+  },
+  bagSizeHeader: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  bagSizeId: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#374151',
+  },
+  bagSizeName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  bagSizeDescription: {
+    fontSize: 11,
+    textAlign: 'center',
+    color: '#6B7280',
+  },
+  selectedBagSizeText: {
+    color: '#34A853',
+  },
+  selectedBagSizeDescText: {
+    color: '#16A34A',
   },
   volumeCard: {
     backgroundColor: '#FFFFFF',

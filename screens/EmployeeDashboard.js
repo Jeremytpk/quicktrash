@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getCountFromServer } from 'firebase/firestore';
+import { collection, query, where, getCountFromServer, getDocs } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import {
   View,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   Dimensions,
   Modal,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
@@ -62,6 +63,44 @@ const EmployeeDashboard = ({ navigation }) => {
       }
     };
     fetchActiveJobsCount();
+  }, []);
+
+  // Fetch count of completed jobs
+  useEffect(() => {
+    const fetchCompletedJobsCount = async () => {
+      try {
+        const jobsRef = collection(db, 'jobs');
+        const q = query(jobsRef, where('status', '==', 'completed'));
+        const snapshot = await getCountFromServer(q);
+        setDashboardStats((prev) => ({ ...prev, completedToday: snapshot.data().count }));
+      } catch (error) {
+        // fallback: do not update count
+        console.error('Error fetching completed jobs count:', error);
+      }
+    };
+    fetchCompletedJobsCount();
+  }, []);
+
+  // Fetch total revenue from all jobs
+  useEffect(() => {
+    const fetchTotalRevenue = async () => {
+      try {
+        const jobsRef = collection(db, 'jobs');
+        const snapshot = await getDocs(jobsRef);
+        let total = 0;
+        snapshot.forEach((doc) => {
+          const job = doc.data();
+          if (job.pricing?.total && typeof job.pricing.total === 'number') {
+            total += job.pricing.total;
+          }
+        });
+        setDashboardStats((prev) => ({ ...prev, revenue: `$${total.toFixed(2)}` }));
+      } catch (error) {
+        // fallback: do not update revenue
+        console.error('Error fetching total revenue:', error);
+      }
+    };
+    fetchTotalRevenue();
   }, []);
 
   const [activeJobs] = useState([
@@ -143,11 +182,6 @@ const EmployeeDashboard = ({ navigation }) => {
         title="Admin Dashboard"
         subtitle="QuickTrash Operations"
         showBackButton={false}
-        rightComponent={
-          <TouchableOpacity style={styles.settingsButton}>
-            <Ionicons name="settings-outline" size={24} color="#333" />
-          </TouchableOpacity>
-        }
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -174,11 +208,15 @@ const EmployeeDashboard = ({ navigation }) => {
               <Text style={styles.statNumber}>{dashboardStats.completedToday}</Text>
               <Text style={styles.statLabel}>Completed Today</Text>
             </View>
-            <View style={[styles.statCard, { backgroundColor: '#9C27B0' }]}> 
+            <TouchableOpacity
+              style={[styles.statCard, { backgroundColor: '#9C27B0' }]}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('Revenue')}
+            >
               <Ionicons name="cash" size={24} color="#FFFFFF" />
               <Text style={styles.statNumber}>{dashboardStats.revenue}</Text>
               <Text style={styles.statLabel}>Revenue</Text>
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -213,31 +251,6 @@ const EmployeeDashboard = ({ navigation }) => {
               ))}
             </MapView>
           </View>
-        </View>
-
-        {/* Active Jobs */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Active Jobs</Text>
-          {activeJobs.map((job) => (
-            <View key={job.id} style={styles.jobCard}>
-              <View style={styles.jobHeader}>
-                <View style={styles.jobInfo}>
-                  <Text style={styles.jobCustomer}>{job.customer}</Text>
-                  <Text style={styles.jobType}>{job.type}</Text>
-                  <Text style={styles.jobContractor}>Driver: {job.contractor}</Text>
-                </View>
-                <View style={styles.jobStatus}>
-                  <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: job.status === 'In Progress' ? '#FF8F00' : '#34A853' }
-                  ]}>
-                    <Text style={styles.statusText}>{job.status}</Text>
-                  </View>
-                  <Text style={styles.jobTime}>Started: {job.startTime}</Text>
-                </View>
-              </View>
-            </View>
-          ))}
         </View>
 
         {/* Disputes Section */}
@@ -355,10 +368,11 @@ const EmployeeDashboard = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    marginTop: Platform.OS === 'android' ? 25 : 0,
     backgroundColor: '#F8F9FA',
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'row', 
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
