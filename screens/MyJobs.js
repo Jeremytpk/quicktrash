@@ -179,6 +179,9 @@ const MyJobs = ({ navigation, route }) => {
   };
 
   const handleStartJob = async (jobId) => {
+    // Find the job to get address details
+    const job = jobs.find(j => j.id === jobId);
+    
     Alert.alert(
       'Start Job',
       'Are you ready to start this pickup?',
@@ -189,15 +192,36 @@ const MyJobs = ({ navigation, route }) => {
           onPress: async () => {
             try {
               // Update job status to in_progress
+              const jobRef = doc(db, 'jobs', jobId);
+              await updateDoc(jobRef, { 
+                status: 'in_progress', 
+                startedAt: serverTimestamp() 
+              });
+              
               setJobs(prev =>
-                prev.map(job =>
-                  job.id === jobId
-                    ? { ...job, status: 'in_progress', startedAt: new Date() }
-                    : job
+                prev.map(j =>
+                  j.id === jobId
+                    ? { ...j, status: 'in_progress', startedAt: new Date() }
+                    : j
                 )
               );
-              Alert.alert('Success', 'Job started! Navigate to the pickup location.');
+              
+              // Navigate to NavigationScreen with job details
+              if (job) {
+                const lat = job.pickupAddress?.coordinates?.latitude || job.location?.coordinates?.latitude;
+                const lng = job.pickupAddress?.coordinates?.longitude || job.location?.coordinates?.longitude;
+                
+                navigation.navigate('NavigationScreen', {
+                  jobId: jobId,
+                  targetLocation: {
+                    latitude: lat,
+                    longitude: lng
+                  },
+                  address: job.location?.address || job.pickupAddress?.fullAddress || job.pickupAddress?.street || 'Customer Location'
+                });
+              }
             } catch (error) {
+              console.error('Error starting job:', error);
               Alert.alert('Error', 'Failed to start job');
             }
           }
@@ -438,26 +462,35 @@ const MyJobs = ({ navigation, route }) => {
               {/* Location */}
               <View style={styles.modalSection}>
                 <Text style={styles.modalSectionTitle}>Pickup Location</Text>
-                <Text style={styles.addressText}>{selectedJob.location.address}</Text>
+                <Text style={styles.addressText}>
+                  {selectedJob.location?.address || selectedJob.pickupAddress?.fullAddress || selectedJob.pickupAddress?.street || 'Address not available'}
+                </Text>
                 <TouchableOpacity 
                   style={styles.navigationButton}
                   onPress={() => {
-                    const address = encodeURIComponent(selectedJob.location.address);
-                    const lat = selectedJob.location?.latitude;
-                    const lng = selectedJob.location?.longitude;
+                    // Get coordinates from pickupAddress or location
+                    const lat = selectedJob.pickupAddress?.coordinates?.latitude || selectedJob.location?.coordinates?.latitude;
+                    const lng = selectedJob.pickupAddress?.coordinates?.longitude || selectedJob.location?.coordinates?.longitude;
+                    const address = selectedJob.location?.address || selectedJob.pickupAddress?.fullAddress || selectedJob.pickupAddress?.street || 'Address not available';
                     
                     let url;
                     if (Platform.OS === 'ios') {
                       // Use Apple Maps on iOS
-                      url = lat && lng 
-                        ? `maps://app?daddr=${lat},${lng}`
-                        : `maps://app?daddr=${address}`;
+                      if (lat && lng) {
+                        url = `maps://app?daddr=${lat},${lng}`;
+                      } else {
+                        url = `maps://app?daddr=${encodeURIComponent(address)}`;
+                      }
                     } else {
                       // Use Google Maps on Android and Web
-                      url = lat && lng
-                        ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
-                        : `https://www.google.com/maps/dir/?api=1&destination=${address}`;
+                      if (lat && lng) {
+                        url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+                      } else {
+                        url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+                      }
                     }
+                    
+                    console.log('Opening navigation:', { lat, lng, address, url });
                     
                     if (Platform.OS === 'web') {
                       window.open(url, '_blank');
