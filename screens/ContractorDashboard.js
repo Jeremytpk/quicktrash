@@ -28,6 +28,20 @@ const formatDate = (timestamp) => {
   return timestamp.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
+// Calculate distance between two coordinates using Haversine formula
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 3959; // Earth's radius in miles
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const distance = R * c;
+  return distance.toFixed(1); // Return distance in miles with 1 decimal
+};
+
 const ContractorDashboard = ({ navigation }) => {
   const { user } = useUser();
   const [isOnline, setIsOnline] = useState(false);
@@ -90,7 +104,27 @@ const ContractorDashboard = ({ navigation }) => {
       (querySnapshot) => {
         const jobs = [];
         querySnapshot.forEach((doc) => {
-          jobs.push({ id: doc.id, ...doc.data(), coordinates: doc.data().pickupAddress || {} });
+          const jobData = doc.data();
+          const jobWithCoords = { 
+            id: doc.id, 
+            ...jobData, 
+            coordinates: jobData.pickupAddress || {} 
+          };
+          
+          // Calculate distance if we have both driver location and job coordinates
+          if (driverLocation && jobData.pickupAddress?.coordinates) {
+            const distance = calculateDistance(
+              driverLocation.latitude,
+              driverLocation.longitude,
+              jobData.pickupAddress.coordinates.latitude,
+              jobData.pickupAddress.coordinates.longitude
+            );
+            jobWithCoords.distance = `${distance} mi`;
+          } else {
+            jobWithCoords.distance = jobData.distance || 'N/A';
+          }
+          
+          jobs.push(jobWithCoords);
         });
 
         jobs.sort((a, b) => {
@@ -128,7 +162,7 @@ const ContractorDashboard = ({ navigation }) => {
     );
 
     return () => unsubscribe();
-  }, [jobFilter, handleJobOffer]);
+  }, [jobFilter, handleJobOffer, driverLocation]);
 
   const [todayStats, setTodayStats] = useState({
     jobsCompleted: 0,
@@ -180,7 +214,13 @@ const ContractorDashboard = ({ navigation }) => {
     if (!activeJob || !user) return;
     try {
       const jobRef = doc(db, 'jobs', activeJob.id);
-      await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: user.uid });
+      // Include the distance when accepting the job
+      await updateDoc(jobRef, { 
+        status: 'accepted', 
+        acceptedAt: new Date(), 
+        contractorId: user.uid,
+        distance: activeJob.distance || 'N/A' // Save the calculated distance
+      });
       
       // Close modal first
       setShowJobModal(false);
@@ -234,7 +274,13 @@ const ContractorDashboard = ({ navigation }) => {
     setIsAccepting(true);
     try {
       const jobRef = doc(db, 'jobs', jobToConfirm.id);
-      await updateDoc(jobRef, { status: 'accepted', acceptedAt: new Date(), contractorId: user.uid });
+      // Include the distance when accepting the job
+      await updateDoc(jobRef, { 
+        status: 'accepted', 
+        acceptedAt: new Date(), 
+        contractorId: user.uid,
+        distance: jobToConfirm.distance || 'N/A' // Save the calculated distance
+      });
       
       // Close confirmation modal
       setShowConfirmModal(false);
@@ -318,7 +364,7 @@ const ContractorDashboard = ({ navigation }) => {
         <View style={styles.jobDetailsSection}>
           <Text style={styles.jobVolumeNew}>{job.volume} | {formatDate(job.createdAt)}</Text>
           <View style={styles.jobMetrics}>
-            <View style={styles.metric}><Ionicons name="location-outline" size={16} color="#6B7280" /><Text style={styles.metricText}>{job.distance || '1.5 mi'}</Text></View>
+            <View style={styles.metric}><Ionicons name="location-outline" size={16} color="#6B7280" /><Text style={styles.metricText}>{job.distance || 'N/A'}</Text></View>
             <Text style={styles.jobAddressNew}>{job.pickupAddress?.fullAddress || 'Address Not Available'}</Text>
           </View>
         </View>

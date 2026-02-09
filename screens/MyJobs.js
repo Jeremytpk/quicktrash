@@ -26,6 +26,20 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 
+// Calculate distance between two coordinates using Haversine formula
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 3959; // Earth's radius in miles
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const distance = R * c;
+  return distance.toFixed(1); // Return distance in miles with 1 decimal
+};
+
 const MyJobs = ({ navigation, route }) => {
   const { user, contractorId } = useUser();
   const [jobs, setJobs] = useState([]);
@@ -68,6 +82,18 @@ const MyJobs = ({ navigation, route }) => {
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         console.log('MyJobs: Job data:', { id: doc.id, status: data.status, contractorId: data.contractorId });
+        
+        // Calculate distance if job has coordinates
+        let distance = 'N/A';
+        if (data.pickupAddress?.coordinates?.latitude && data.pickupAddress?.coordinates?.longitude) {
+          // You could get contractor's current location here and calculate distance
+          // For now, we'll use the distance from the job data if available
+          if (data.distance) {
+            // If distance already includes " mi", just use it; otherwise add it
+            distance = data.distance.toString().includes('mi') ? data.distance : `${data.distance} mi`;
+          }
+        }
+        
         jobsList.push({
           id: doc.id,
           ...data,
@@ -81,7 +107,7 @@ const MyJobs = ({ navigation, route }) => {
           volume: data.volume || 'N/A',
           location: data.location || data.pickupAddress || { address: 'Address not available' },
           contractorEarnings: data.pricing?.contractorPayout || data.contractorEarnings || 0,
-          distance: data.distance || 'N/A',
+          distance: distance,
         });
       });
       console.log('MyJobs: Total jobs fetched:', jobsList.length);
@@ -256,7 +282,11 @@ const MyJobs = ({ navigation, route }) => {
           
           <View style={styles.detailItem}>
             <Ionicons name="location-outline" size={16} color="#6B7280" />
-            <Text style={styles.detailText}>{item.distance} mi away</Text>
+            <Text style={styles.detailText}>
+              {item.distance && item.distance !== 'N/A' 
+                ? (item.distance.includes('mi') ? item.distance : `${item.distance} mi`) + ' away'
+                : 'Distance N/A'}
+            </Text>
           </View>
         </View>
 
@@ -413,7 +443,11 @@ const MyJobs = ({ navigation, route }) => {
                   </View>
                   <View style={styles.infoItem}>
                     <Text style={styles.infoLabel}>Distance</Text>
-                    <Text style={styles.infoValue}>{selectedJob.distance} mi</Text>
+                    <Text style={styles.infoValue}>
+                      {selectedJob.distance && selectedJob.distance !== 'N/A' 
+                        ? (selectedJob.distance.includes('mi') ? selectedJob.distance : `${selectedJob.distance} mi`)
+                        : 'N/A'}
+                    </Text>
                   </View>
                 </View>
               </View>
