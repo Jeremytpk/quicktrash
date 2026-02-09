@@ -279,15 +279,6 @@ const MyJobs = ({ navigation, route }) => {
                'In progress'}
             </Text>
           </View>
-          
-          <View style={styles.detailItem}>
-            <Ionicons name="location-outline" size={16} color="#6B7280" />
-            <Text style={styles.detailText}>
-              {item.distance && item.distance !== 'N/A' 
-                ? (item.distance.includes('mi') ? item.distance : `${item.distance} mi`) + ' away'
-                : 'Distance N/A'}
-            </Text>
-          </View>
         </View>
 
         {(item.status === 'accepted' || item.status === 'scheduled') && (
@@ -440,14 +431,6 @@ const MyJobs = ({ navigation, route }) => {
                   <View style={styles.infoItem}>
                     <Text style={styles.infoLabel}>Earnings</Text>
                     <Text style={styles.infoValue}>${selectedJob.contractorEarnings}</Text>
-                  </View>
-                  <View style={styles.infoItem}>
-                    <Text style={styles.infoLabel}>Distance</Text>
-                    <Text style={styles.infoValue}>
-                      {selectedJob.distance && selectedJob.distance !== 'N/A' 
-                        ? (selectedJob.distance.includes('mi') ? selectedJob.distance : `${selectedJob.distance} mi`)
-                        : 'N/A'}
-                    </Text>
                   </View>
                 </View>
               </View>
