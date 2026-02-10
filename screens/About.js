@@ -38,8 +38,9 @@ const About = () => {
         <View style={styles.header}>
           <Logo size="large" showText={false} style={styles.logoContainer} />
           <Text style={styles.appName}>QuickTrash</Text>
-          <Text style={styles.version}>Version 1.0.0 (Build 100)</Text>
+          <Text style={styles.version}>Version 1.0.0</Text>
           <Text style={styles.tagline}>On-demand trash pickup when you need it</Text>
+          <Text style={styles.poweredBy}>Powered by Jerttech</Text>
         </View>
 
         {/* About Section */}
@@ -152,7 +153,7 @@ const About = () => {
             style={styles.contactItem}
             onPress={() => handleContactPress('social')}
           >
-            <Ionicons name="logo-twitter" size={20} color="#6B7280" />
+            <Ionicons name="logo-facebook" size={20} color="#6B7280" />
             <Text style={styles.contactText}>@quicktrash</Text>
             <Ionicons name="open-outline" size={16} color="#9CA3AF" />
           </TouchableOpacity>
@@ -167,7 +168,7 @@ const About = () => {
           </Text>
         </View>
 
-        {/* Technical Info */}
+        {/* Technical Info 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Technical Information</Text>
           <View style={styles.techInfo}>
@@ -178,6 +179,7 @@ const About = () => {
             <Text style={styles.techItem}>Last Updated: January 15, 2025</Text>
           </View>
         </View>
+        */}
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
@@ -222,6 +224,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  poweredBy: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 16,
   },
   section: {
     backgroundColor: '#FFFFFF',

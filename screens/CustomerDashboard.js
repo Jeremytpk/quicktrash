@@ -30,6 +30,7 @@ const CustomerDashboard = ({ navigation }) => {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [pricingData, setPricingData] = useState(null);
   const [loadingPricing, setLoadingPricing] = useState(true);
+  const [showRecentOrders, setShowRecentOrders] = useState(true);
 
   useEffect(() => {
     // Initialize location service for customers (with Atlanta default)
@@ -211,12 +212,18 @@ const CustomerDashboard = ({ navigation }) => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Orders</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('OrderHistory')}>
-              <Text style={styles.seeAllText}>See All</Text>
+            <TouchableOpacity onPress={() => setShowRecentOrders(!showRecentOrders)} style={styles.toggleButton}>
+              <Ionicons 
+                name={showRecentOrders ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color="#34A853" 
+              />
             </TouchableOpacity>
           </View>
           
-          {loadingOrders ? (
+          {showRecentOrders && (
+            <>
+              {loadingOrders ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color="#34A853" />
               <Text style={styles.loadingText}>Loading orders...</Text>
@@ -243,6 +250,8 @@ const CustomerDashboard = ({ navigation }) => {
               <Text style={styles.emptyStateText}>No orders yet</Text>
               <Text style={styles.emptyStateSubtext}>Your pickup history will appear here</Text>
             </View>
+          )}
+          </>
           )}
         </View>
       </ScrollView>
@@ -316,6 +325,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1F2937',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  toggleButton: {
+    padding: 4,
   },
   seeAllText: {
     fontSize: 14,

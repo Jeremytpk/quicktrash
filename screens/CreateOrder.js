@@ -202,6 +202,47 @@ const CreateOrder = ({ navigation, route }) => {
     }
   };
 
+  const pickFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Media library permission is required to select photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setPhotos(prev => [...prev, result.assets[0]]);
+    }
+  };
+
+  const handleAddPhoto = () => {
+    Alert.alert(
+      'Add Photo',
+      'Choose photo source',
+      [
+        {
+          text: 'Take Photo',
+          onPress: takePhoto,
+        },
+        {
+          text: 'Choose from Gallery',
+          onPress: pickFromGallery,
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
   const removePhoto = (index) => {
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
@@ -209,6 +250,11 @@ const CreateOrder = ({ navigation, route }) => {
   const createOrder = async () => {
     if (!selectedVolume || !selectedBagSize || !pickupLocation) {
       Alert.alert('Missing Information', 'Please select bag size, volume and confirm your pickup location.');
+      return;
+    }
+
+    if (photos.length === 0) {
+      Alert.alert('Photo Required', 'Please upload at least one photo of the items to be picked up.');
       return;
     }
 
@@ -396,11 +442,11 @@ const CreateOrder = ({ navigation, route }) => {
 
         {/* Photos */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Photos (Optional)</Text>
+          <Text style={styles.sectionTitle}>Photos (Required)</Text>
           <Text style={styles.sectionSubtitle}>Help the picker by showing the location of items</Text>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <TouchableOpacity style={styles.photoButton} onPress={takePhoto}>
+            <TouchableOpacity style={styles.photoButton} onPress={handleAddPhoto}>
               <Ionicons name="camera" size={32} color="#6B7280" />
               <Text style={styles.photoButtonText}>Add Photo</Text>
             </TouchableOpacity>
@@ -450,9 +496,9 @@ const CreateOrder = ({ navigation, route }) => {
       {/* Create Order Button */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.createButton, (!selectedVolume || !selectedBagSize || !pickupLocation || loading) && styles.createButtonDisabled]}
+          style={[styles.createButton, (!selectedVolume || !selectedBagSize || !pickupLocation || photos.length === 0 || loading) && styles.createButtonDisabled]}
           onPress={createOrder}
-          disabled={!selectedVolume || !selectedBagSize || !pickupLocation || loading}
+          disabled={!selectedVolume || !selectedBagSize || !pickupLocation || photos.length === 0 || loading}
         >
           <Text style={styles.createButtonText}>
             {loading ? 'Creating Order...' : `Create Order${pricing ? ` - $${pricing.total.toFixed(2)}` : ''}`}
