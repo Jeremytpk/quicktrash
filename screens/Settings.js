@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import SharedHeader from '../components/SharedHeader';
 import { useUser } from '../contexts/UserContext';
 
@@ -16,16 +18,50 @@ const Settings = ({ navigation }) => {
   const { userRole } = useUser();
   const [settings, setSettings] = useState({
     pushNotifications: true,
-    emailNotifications: true,
-    smsNotifications: false,
+    // emailNotifications: true,
+    // smsNotifications: false,
     jobAlerts: true,
-    marketingEmails: false,
-    soundEnabled: true,
-    vibrationEnabled: true,
-    locationServices: true,
-    biometricAuth: false,
-    darkMode: false,
+    // marketingEmails: false,
+    // soundEnabled: true,
+    // vibrationEnabled: true,
+    // locationServices: true,
+    // biometricAuth: false,
+    // darkMode: false,
+    defaultMapNavigator: 'google', // 'google' or 'apple'
   });
+
+  // Load saved map preference on mount
+  useEffect(() => {
+    loadMapPreference();
+  }, []);
+
+  const loadMapPreference = async () => {
+    try {
+      const savedMap = await AsyncStorage.getItem('defaultMapNavigator');
+      if (savedMap) {
+        setSettings(prev => ({
+          ...prev,
+          defaultMapNavigator: savedMap
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading map preference:', error);
+    }
+  };
+
+  const saveMapPreference = async (mapType) => {
+    try {
+      await AsyncStorage.setItem('defaultMapNavigator', mapType);
+      setSettings(prev => ({
+        ...prev,
+        defaultMapNavigator: mapType
+      }));
+      Alert.alert('Success', `Default map navigator set to ${mapType === 'google' ? 'Google Maps' : 'Apple Maps'}`);
+    } catch (error) {
+      console.error('Error saving map preference:', error);
+      Alert.alert('Error', 'Failed to save map preference');
+    }
+  };
 
   const handleToggleSetting = (setting) => {
     setSettings(prev => ({
@@ -97,6 +133,64 @@ const Settings = ({ navigation }) => {
     </TouchableOpacity>
   );
 
+  const renderMapSelector = () => (
+    <View style={styles.mapSelectorContainer}>
+      <View style={styles.settingLeft}>
+        <View style={styles.settingIconContainer}>
+          <Ionicons name="map-outline" size={20} color="#6B7280" />
+        </View>
+        <View style={styles.settingTextContainer}>
+          <Text style={styles.settingTitle}>Default Map Navigator</Text>
+          <Text style={styles.settingSubtitle}>Choose your preferred navigation app</Text>
+        </View>
+      </View>
+      
+      <View style={styles.mapSelectorButtons}>
+        <TouchableOpacity 
+          style={[
+            styles.mapButton, 
+            settings.defaultMapNavigator === 'google' && styles.mapButtonActive
+          ]}
+          onPress={() => saveMapPreference('google')}
+        >
+          <Ionicons 
+            name="logo-google" 
+            size={18} 
+            color={settings.defaultMapNavigator === 'google' ? '#FFFFFF' : '#6B7280'} 
+          />
+          <Text style={[
+            styles.mapButtonText,
+            settings.defaultMapNavigator === 'google' && styles.mapButtonTextActive
+          ]}>
+            Google Maps
+          </Text>
+        </TouchableOpacity>
+        
+        {Platform.OS === 'ios' && (
+          <TouchableOpacity 
+            style={[
+              styles.mapButton, 
+              settings.defaultMapNavigator === 'apple' && styles.mapButtonActive
+            ]}
+            onPress={() => saveMapPreference('apple')}
+          >
+            <Ionicons 
+              name="logo-apple" 
+              size={18} 
+              color={settings.defaultMapNavigator === 'apple' ? '#FFFFFF' : '#6B7280'} 
+            />
+            <Text style={[
+              styles.mapButtonText,
+              settings.defaultMapNavigator === 'apple' && styles.mapButtonTextActive
+            ]}>
+              Apple Maps
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+
   const renderSection = (title, children) => (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -120,6 +214,7 @@ const Settings = ({ navigation }) => {
             true,
             'pushNotifications'
           ),
+          /* Commented out - Email Notifications
           renderSettingItem(
             'mail-outline',
             'Email Notifications',
@@ -127,6 +222,8 @@ const Settings = ({ navigation }) => {
             true,
             'emailNotifications'
           ),
+          */
+          /* Commented out - SMS Notifications
           renderSettingItem(
             'chatbubble-outline',
             'SMS Notifications',
@@ -134,6 +231,7 @@ const Settings = ({ navigation }) => {
             true,
             'smsNotifications'
           ),
+          */
           userRole === 'contractor' && renderSettingItem(
             'briefcase-outline',
             'Job Alerts',
@@ -141,6 +239,7 @@ const Settings = ({ navigation }) => {
             true,
             'jobAlerts'
           ),
+          /* Commented out - Marketing Emails
           renderSettingItem(
             'megaphone-outline',
             'Marketing Emails',
@@ -148,10 +247,11 @@ const Settings = ({ navigation }) => {
             true,
             'marketingEmails'
           ),
+          */
         ].filter(Boolean))}
 
-        {/* App Preferences */}
-        {renderSection('App Preferences', [
+        {/* App Preferences - Commented Out */}
+        {/* renderSection('App Preferences', [
           renderSettingItem(
             'volume-high-outline',
             'Sound',
@@ -173,10 +273,16 @@ const Settings = ({ navigation }) => {
             true,
             'darkMode'
           ),
+        ]) */}
+
+        {/* Navigation Preferences */}
+        {renderSection('Navigation', [
+          renderMapSelector(),
         ])}
 
         {/* Privacy & Security */}
         {renderSection('Privacy & Security', [
+          /* Commented out - Location Services
           renderSettingItem(
             'location-outline',
             'Location Services',
@@ -184,6 +290,8 @@ const Settings = ({ navigation }) => {
             true,
             'locationServices'
           ),
+          */
+          /* Commented out - Biometric Authentication
           renderSettingItem(
             'finger-print-outline',
             'Biometric Authentication',
@@ -191,6 +299,7 @@ const Settings = ({ navigation }) => {
             true,
             'biometricAuth'
           ),
+          */
           renderSettingItem(
             'key-outline',
             'Change Password',
@@ -215,7 +324,7 @@ const Settings = ({ navigation }) => {
             null,
             () => navigation.navigate('TermsConditions')
           ),
-        ])}
+        ].filter(Boolean))}
 
         {/* Support */}
         {renderSection('Support', [
@@ -387,6 +496,43 @@ const styles = StyleSheet.create({
   settingSubtitle: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  mapSelectorContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  mapSelectorButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 16,
+    paddingLeft: 44, // Align with text (icon width + margin)
+  },
+  mapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 8,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  mapButtonActive: {
+    backgroundColor: '#34A853',
+    borderColor: '#34A853',
+  },
+  mapButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  mapButtonTextActive: {
+    color: '#FFFFFF',
   },
   versionContainer: {
     alignItems: 'center',

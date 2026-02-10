@@ -17,7 +17,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, onSnapshot, query, where, updateDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import SharedHeader from '../components/SharedHeader';
 
@@ -46,6 +46,7 @@ const ContractorDashboard = ({ navigation }) => {
   const { user } = useUser();
   const [isOnline, setIsOnline] = useState(false);
   const [driverLocation, setDriverLocation] = useState(null);
+  const [displayName, setDisplayName] = useState('Driver');
   // Track driver's live location when online
   useEffect(() => {
     let locationSubscription;
@@ -78,6 +79,29 @@ const ContractorDashboard = ({ navigation }) => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [jobToConfirm, setJobToConfirm] = useState(null);
   const [isAccepting, setIsAccepting] = useState(false);
+  const [myJobsCount, setMyJobsCount] = useState(0);
+
+  // Fetch user's display name
+  useEffect(() => {
+    const fetchUserDisplayName = async () => {
+      if (user?.uid) {
+        try {
+          const userDoc = await doc(db, 'users', user.uid);
+          const userSnapshot = await getDoc(userDoc);
+          if (userSnapshot.exists()) {
+            const userData = userSnapshot.data();
+            setDisplayName(userData.displayName || user.displayName || 'Driver');
+          } else if (user.displayName) {
+            setDisplayName(user.displayName);
+          }
+        } catch (error) {
+          console.error('Error fetching user display name:', error);
+          setDisplayName(user.displayName || 'Driver');
+        }
+      }
+    };
+    fetchUserDisplayName();
+  }, [user]);
 
   const handleJobOffer = useCallback((job) => {
     // Prevent a new pop-up if one is already showing
@@ -88,6 +112,37 @@ const ContractorDashboard = ({ navigation }) => {
     setShowJobModal(true);
     setCountdown(40);
   }, [showJobModal]);
+
+  // Fetch count of contractor's jobs for notification badge
+  useEffect(() => {
+    if (!user) return;
+    
+    const effectiveContractorId = user.uid;
+    const jobsRef = collection(db, 'jobs');
+    const q = query(
+      jobsRef,
+      where('contractorId', '==', effectiveContractorId)
+    );
+    
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      // Count only active jobs (accepted, scheduled, in_progress, picked_up)
+      const activeJobs = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        const jobStatus = (data.status || '').toLowerCase();
+        const validActiveStatuses = ['accepted', 'scheduled', 'in_progress', 'picked_up'];
+        if (validActiveStatuses.includes(jobStatus)) {
+          activeJobs.push(doc.id);
+        }
+      });
+      setMyJobsCount(activeJobs.length);
+    }, (error) => {
+      console.error('Error fetching my jobs count:', error);
+      setMyJobsCount(0);
+    });
+    
+    return () => unsubscribe();
+  }, [user]);
 
   useEffect(() => {
     console.log(`Setting up Firestore listener for '${jobFilter}' jobs...`);
@@ -388,7 +443,7 @@ const ContractorDashboard = ({ navigation }) => {
     <View style={styles.container}>
       {/* 1. Primary SharedHeader (Visible at the top of the main container) */}
       <SharedHeader 
-        title="Welcome back, Driver!"
+        title={`Welcome back, ${displayName}!`}
         subtitle={
           <View style={styles.onlineStatus}>
             <Switch value={isOnline} onValueChange={handleToggleOnline} trackColor={{ false: '#E5E7EB', true: '#34A853' }} thumbColor={isOnline ? '#FFFFFF' : '#9CA3AF'} />
@@ -397,9 +452,16 @@ const ContractorDashboard = ({ navigation }) => {
         }
         showBackButton={false}
         rightComponent={
-          <TouchableOpacity style={styles.notificationButton}>
+          <TouchableOpacity 
+            style={styles.notificationButton}
+            onPress={() => navigation.navigate('MyJobs')}
+          >
             <Ionicons name="notifications-outline" size={24} color="#333" />
-            <View style={styles.notificationBadge}><Text style={styles.badgeText}>2</Text></View>
+            {myJobsCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.badgeText}>{myJobsCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         }
       />
@@ -483,8 +545,10 @@ const ContractorDashboard = ({ navigation }) => {
           <View style={styles.statsGrid}>
             <View style={styles.statCard}><Ionicons name="checkmark-circle" size={24} color="#34A853" /><Text style={styles.statNumber}>{todayStats.jobsCompleted}</Text><Text style={styles.statLabel}>Jobs Completed</Text></View>
             <View style={styles.statCard}><Ionicons name="cash" size={24} color="#FF8F00" /><Text style={styles.statNumber}>{todayStats.earnings}</Text><Text style={styles.statLabel}>Earnings</Text></View>
+            {/* Hidden for now - will be needed later
             <View style={styles.statCard}><Ionicons name="time" size={24} color="#1E88E5" /><Text style={styles.statNumber}>{todayStats.hoursOnline}</Text><Text style={styles.statLabel}>Hours Online</Text></View>
             <View style={styles.statCard}><Ionicons name="star" size={24} color="#FFB300" /><Text style={styles.statNumber}>{todayStats.rating}</Text><Text style={styles.statLabel}>Rating</Text></View>
+            */}
           </View>
         </View>
       </ScrollView>

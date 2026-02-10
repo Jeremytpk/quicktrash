@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location'; 
-import * as Linking from 'expo-linking'; 
+import * as Linking from 'expo-linking';
 import MAPS_CONFIG from '../config/mapsConfig';
 
 // --- Component Colors ---
@@ -54,9 +54,15 @@ const calculateDistance = (coord1, coord2) => {
 
 
 const NavigationScreen = ({ route, navigation }) => {
-  const { coordinates, address, payout, description, jobId } = route.params || {};
+  const { coordinates, targetLocation: paramTargetLocation, address, payout, description, jobId } = route.params || {};
 
-  const [targetLocation, setTargetLocation] = useState(coordinates);
+  // Debug logging
+  console.log('NavigationScreen params:', { coordinates, paramTargetLocation, address, payout, jobId });
+
+  // Use either coordinates or targetLocation from params
+  const initialLocation = coordinates || paramTargetLocation;
+  
+  const [targetLocation, setTargetLocation] = useState(initialLocation);
   const [driverLocation, setDriverLocation] = useState(null); 
   const [isLoading, setIsLoading] = useState(true);
   const [isWithinLocation, setIsWithinLocation] = useState(false);
@@ -69,8 +75,47 @@ const NavigationScreen = ({ route, navigation }) => {
 
   const mapRef = useRef(null);
 
+  // Handle action when contractor is within proximity circle
+  const handlePickUp = () => {
+    if (!jobId) {
+      Alert.alert('Error', 'Job ID is missing.');
+      return;
+    }
+
+    // If navigating to dumpster, go to dump confirmation
+    if (route.params?.mode === 'dumpster') {
+      navigation.navigate('DumpConfirmation', {
+        jobId,
+        coordinates: targetLocation,
+        address,
+        payout,
+        description,
+      });
+      return;
+    }
+
+    // Default: at customer location, go to pickup confirmation
+    navigation.navigate('PickupConfirmation', {
+      jobId,
+      coordinates: targetLocation,
+      address,
+      payout,
+      description,
+    });
+  };
+
   // --- Location Permissions & Real-time Tracking ---
   useEffect(() => {
+    // Validate that we have coordinates
+    if (!initialLocation || !initialLocation.latitude || !initialLocation.longitude) {
+      Alert.alert(
+        'Invalid Location',
+        'Job location data is missing or invalid. Please try again.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+      return;
+    }
+
     // If caller passed a flag to show dumpsters, enable button and fetch
     if (route.params?.showDumpsters) {
       setShowDumpsterButton(true);
@@ -223,7 +268,7 @@ const NavigationScreen = ({ route, navigation }) => {
       const location = `${locationCoords.latitude},${locationCoords.longitude}`;
       // radius in meters
       const radius = 5000;
-      const keyword = encodeURIComponent('dumpster');
+      const keyword = encodeURIComponent('public dumpster waste disposal');
       const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location}&radius=${radius}&keyword=${keyword}&key=${apiKey}`;
 
       const resp = await fetch(url);
@@ -290,6 +335,22 @@ const NavigationScreen = ({ route, navigation }) => {
     );
   }
 
+  // --- Error State for Invalid Coordinates ---
+  if (!targetLocation || !targetLocation.latitude || !targetLocation.longitude) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Ionicons name="warning-outline" size={48} color={Colors.warning} />
+        <Text style={styles.loadingText}>Invalid location data</Text>
+        <TouchableOpacity 
+          style={[styles.arrivedButton, styles.activeButton, { marginTop: 20, paddingHorizontal: 30 }]}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.arrivedButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <MapView
@@ -297,8 +358,8 @@ const NavigationScreen = ({ route, navigation }) => {
         ref={mapRef}
         style={styles.map}
         initialRegion={{
-          latitude: coordinates.latitude,
-          longitude: coordinates.longitude,
+          latitude: targetLocation?.latitude || 0,
+          longitude: targetLocation?.longitude || 0,
           latitudeDelta: 0.005,
           longitudeDelta: 0.005,
         }}
@@ -367,23 +428,26 @@ const NavigationScreen = ({ route, navigation }) => {
           </View>
         )}
         
-        {/* Updated Button Logic */}
-        <TouchableOpacity
-          style={[styles.arrivedButton, styles.activeButton]}
-          onPress={() => navigation.navigate('DumpConfirmation', { jobId, coordinates: targetLocation, address, payout, description })}
-        >
-          <Text style={styles.arrivedButtonText}>BEGIN DUMP</Text>
-        </TouchableOpacity>
+        {/* Show Navigate when outside circle, Pick Up when inside */}
+        {isWithinLocation ? (
+          <TouchableOpacity
+            style={[styles.arrivedButton, styles.activeButton]}
+            onPress={handlePickUp}
+          >
+            <Text style={styles.arrivedButtonText}>
+              {route.params?.mode === 'dumpster' ? 'DUMP TRASH' : 'PICK UP'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.arrivedButton, styles.navigateButton]}
+            onPress={startNavigation}
+          >
+            <Ionicons name="navigate" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+            <Text style={styles.arrivedButtonText}>NAVIGATE</Text>
+          </TouchableOpacity>
+        )}
       </View>
-
-      {/* Floating list button - appears only after arrival/if requested by route params */}
-      {/* Persistent floating button: always available and starts the dumping flow */}
-      <TouchableOpacity
-        style={styles.arrivedFloatingButton}
-        onPress={() => navigation.navigate('DumpConfirmation', { jobId, coordinates: targetLocation, address, payout, description })}
-      >
-        <Text style={styles.arrivedFloatingButtonText}>BEGIN DUMP</Text>
-      </TouchableOpacity>
 
       {showDumpsterButton && (
         <TouchableOpacity
@@ -570,10 +634,20 @@ const styles = StyleSheet.create({
     color: Colors.textMedium,
   },
   arrivedButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
     marginTop: 15,
+  },
+  navigateButton: {
+    backgroundColor: Colors.secondary,
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
   },
   activeButton: {
     backgroundColor: Colors.primary,
@@ -608,28 +682,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
     zIndex: 10, 
-  },
-
-  arrivedFloatingButton: {
-    position: 'absolute',
-    bottom: 140,
-    right: 20,
-    backgroundColor: Colors.secondary,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 7,
-    zIndex: 11,
-  },
-  arrivedFloatingButtonText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 12,
-    letterSpacing: 0.6,
   },
   
   // --- PROFESSIONAL DUMPSTER LIST STYLES (NEW/UPDATED) ---

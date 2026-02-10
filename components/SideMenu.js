@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,15 @@ import {
   Animated,
   Dimensions,
   Pressable,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../contexts/UserContext';
 import Logo from './Logo';
-import { auth } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import { signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import JobMonitoring from '../screens/JobMonitoring';
 
 const { width } = Dimensions.get('window');
@@ -28,10 +30,37 @@ const SideMenu = ({ visible, onClose }) => {
   const safeVisible = typeof visible === 'string' ? visible === 'true' : !!visible;
   const navigation = useNavigation();
   const { user, userRole, setUserRole } = useUser();
+  const [userPhotoURL, setUserPhotoURL] = useState(null);
+  const [displayName, setDisplayName] = useState('User');
 
   // Animation values for the slide and overlay fade
   const slideAnim = useRef(new Animated.Value(width)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Fetch user profile data
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (user?.uid) {
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          const userSnapshot = await getDoc(userDocRef);
+          if (userSnapshot.exists()) {
+            const userData = userSnapshot.data();
+            setUserPhotoURL(userData.photoURL || user.photoURL || null);
+            setDisplayName(userData.displayName || user.displayName || 'User');
+          } else {
+            setUserPhotoURL(user.photoURL || null);
+            setDisplayName(user.displayName || 'User');
+          }
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
+          setUserPhotoURL(user.photoURL || null);
+          setDisplayName(user.displayName || 'User');
+        }
+      }
+    };
+    fetchUserProfile();
+  }, [user]);
 
   // Trigger animations when the menu's visibility changes
   useEffect(() => {
@@ -215,10 +244,21 @@ const SideMenu = ({ visible, onClose }) => {
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.logoSection}>
-                <Logo variant="menu" />
+                <View style={styles.profileImageContainer}>
+                  {userPhotoURL ? (
+                    <Image 
+                      source={{ uri: userPhotoURL }} 
+                      style={styles.profileImage}
+                    />
+                  ) : (
+                    <View style={styles.profilePlaceholder}>
+                      <Logo variant="menu" />
+                    </View>
+                  )}
+                </View>
                 <View style={styles.userInfo}>
                   <Text style={styles.userName}>
-                    {user?.displayName || 'User'}
+                    {displayName}
                   </Text>
                   <Text style={styles.userRole}>
                     {userRole?.charAt(0).toUpperCase() + userRole?.slice(1)}
@@ -339,6 +379,24 @@ const styles = StyleSheet.create({
   logoSection: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  profileImageContainer: {
+    marginRight: 12,
+  },
+  profileImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E5E7EB',
+  },
+  profilePlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
   userInfo: {
     flex: 1,

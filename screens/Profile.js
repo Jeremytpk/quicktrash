@@ -12,17 +12,20 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import SharedHeader from '../components/SharedHeader';
 import { useUser } from '../contexts/UserContext';
-import { auth, db } from '../firebaseConfig';
+import { auth, db, storage } from '../firebaseConfig';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const Profile = () => {
   const { user, userRole } = useUser();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [userData, setUserData] = useState({});
   const [formData, setFormData] = useState({
     displayName: '',
@@ -35,6 +38,7 @@ const Profile = () => {
     licensePlate: '',
     department: '',
     jobTitle: '',
+    photoURL: '',
   });
 
   useEffect(() => {
@@ -59,6 +63,7 @@ const Profile = () => {
             licensePlate: data.licensePlate || '',
             department: data.department || '',
             jobTitle: data.jobTitle || '',
+            photoURL: data.photoURL || '',
           });
         }
       }
@@ -67,6 +72,76 @@ const Profile = () => {
       Alert.alert('Error', 'Failed to load profile data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'We need camera roll permissions to upload photos.');
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        await uploadProfilePhoto(imageUri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  const uploadProfilePhoto = async (uri) => {
+    setUploadingPhoto(true);
+    try {
+      // Create a unique filename
+      const filename = `profile_${user.uid}_${Date.now()}.jpg`;
+      const storageRef = ref(storage, `profile_photos/${filename}`);
+
+      // Convert URI to blob
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      // Upload to Firebase Storage
+      await uploadBytes(storageRef, blob);
+
+      // Get download URL
+      const downloadURL = await getDownloadURL(storageRef);
+
+      // Update form data with new photo URL
+      setFormData({ ...formData, photoURL: downloadURL });
+
+      // Also update Firebase Auth profile immediately
+      await updateProfile(auth.currentUser, {
+        photoURL: downloadURL,
+      });
+
+      // Update Firestore
+      await updateDoc(doc(db, 'users', user.uid), {
+        photoURL: downloadURL,
+        updatedAt: serverTimestamp(),
+      });
+
+      // Update local userData
+      setUserData({ ...userData, photoURL: downloadURL });
+
+      Alert.alert('Success', 'Profile photo updated successfully!');
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      Alert.alert('Error', 'Failed to upload photo. Please try again.');
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -107,6 +182,7 @@ const Profile = () => {
       licensePlate: userData.licensePlate || '',
       department: userData.department || '',
       jobTitle: userData.jobTitle || '',
+      photoURL: userData.photoURL || '',
     });
     setEditing(false);
   };
@@ -192,14 +268,29 @@ const Profile = () => {
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-            <View style={styles.avatarBackground}>
-              <Text style={styles.avatarText}>
-                {(formData.displayName || user?.email || '?').charAt(0).toUpperCase()}
-              </Text>
-            </View>
+            {formData.photoURL ? (
+              <Image 
+                source={{ uri: formData.photoURL }} 
+                style={styles.avatarImage}
+              />
+            ) : (
+              <View style={styles.avatarBackground}>
+                <Text style={styles.avatarText}>
+                  {(formData.displayName || user?.email || '?').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
             {editing && (
-              <TouchableOpacity style={styles.changePhotoButton}>
-                <Ionicons name="camera" size={16} color="#6B7280" />
+              <TouchableOpacity 
+                style={styles.changePhotoButton}
+                onPress={handlePickImage}
+                disabled={uploadingPhoto}
+              >
+                {uploadingPhoto ? (
+                  <ActivityIndicator size="small" color="#34A853" />
+                ) : (
+                  <Ionicons name="camera" size={16} color="#6B7280" />
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -341,6 +432,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#34A853',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E5E7EB',
   },
   avatarText: {
     fontSize: 32,

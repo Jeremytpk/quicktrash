@@ -13,6 +13,7 @@ import {
   Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import SharedHeader from '../components/SharedHeader';
 import { useUser } from '../contexts/UserContext';
 import { db, auth } from '../firebaseConfig';
@@ -114,7 +115,7 @@ const MyJobs = ({ navigation, route }) => {
       // Filter by UI filter - only show accepted and beyond statuses
       const filteredJobs = jobsList.filter(job => {
         const jobStatus = (job.status || '').toLowerCase();
-        const validStatuses = ['accepted', 'scheduled', 'in_progress', 'completed'];
+        const validStatuses = ['accepted', 'scheduled', 'in_progress', 'picked_up', 'completed'];
         
         // Check if status is valid
         if (!validStatuses.includes(jobStatus)) {
@@ -124,7 +125,7 @@ const MyJobs = ({ navigation, route }) => {
         
         switch (filter) {
           case 'active':
-            const isActive = ['accepted', 'scheduled', 'in_progress'].includes(jobStatus);
+            const isActive = ['accepted', 'scheduled', 'in_progress', 'picked_up'].includes(jobStatus);
             console.log('MyJobs: Active filter - Job:', job.id, 'Status:', jobStatus, 'Included:', isActive);
             return isActive;
           case 'completed':
@@ -153,6 +154,7 @@ const MyJobs = ({ navigation, route }) => {
       case 'accepted': return '#8B5CF6';
       case 'scheduled': return '#3B82F6';
       case 'in_progress': return '#F59E0B';
+      case 'picked_up': return '#F97316';
       case 'completed': return '#34A853';
       default: return '#6B7280';
     }
@@ -163,6 +165,7 @@ const MyJobs = ({ navigation, route }) => {
       case 'accepted': return 'Accepted';
       case 'scheduled': return 'Scheduled';
       case 'in_progress': return 'In Progress';
+      case 'picked_up': return 'Picked Up';
       case 'completed': return 'Completed';
       default: return status;
     }
@@ -208,8 +211,59 @@ const MyJobs = ({ navigation, route }) => {
               
               // Navigate to NavigationScreen with job details
               if (job) {
-                const lat = job.pickupAddress?.coordinates?.latitude || job.location?.coordinates?.latitude;
-                const lng = job.pickupAddress?.coordinates?.longitude || job.location?.coordinates?.longitude;
+                console.log('=== JOB NAVIGATION DEBUG ===');
+                console.log('Job ID:', jobId);
+                console.log('Job keys:', Object.keys(job));
+                console.log('pickupAddress structure:', job.pickupAddress);
+                console.log('location structure:', job.location);
+                
+                // Get coordinates from pickupAddress (main source)
+                let lat = job.pickupAddress?.coordinates?.latitude;
+                let lng = job.pickupAddress?.coordinates?.longitude;
+                
+                console.log('Step 1 - pickupAddress.coordinates:', { lat, lng });
+                
+                // Fallback: check if coordinates are directly in pickupAddress
+                if (!lat && job.pickupAddress?.latitude) {
+                  lat = job.pickupAddress.latitude;
+                  lng = job.pickupAddress.longitude;
+                  console.log('Step 2 - pickupAddress flat:', { lat, lng });
+                }
+                
+                // Additional fallback: check location field
+                if (!lat && job.location?.coordinates) {
+                  lat = job.location.coordinates.latitude;
+                  lng = job.location.coordinates.longitude;
+                  console.log('Step 3 - location.coordinates:', { lat, lng });
+                }
+                
+                // Last resort: geocode the customer's address
+                if (!lat) {
+                  const customerAddress = job.pickupAddress?.fullAddress || job.pickupAddress?.street || job.location?.address;
+                  if (customerAddress) {
+                    try {
+                      const geocoded = await Location.geocodeAsync(customerAddress);
+                      if (geocoded && geocoded.length > 0) {
+                        lat = geocoded[0].latitude;
+                        lng = geocoded[0].longitude;
+                        console.log('Geocoded customer address:', { customerAddress, lat, lng });
+                      }
+                    } catch (geoError) {
+                      console.error('Error geocoding customer address:', geoError);
+                    }
+                  }
+                }
+                
+                console.log('Final extracted coordinates:', { lat, lng });
+                
+                if (!lat || !lng) {
+                  Alert.alert(
+                    'Location Error',
+                    'This job does not have valid location coordinates. Please contact support.',
+                    [{ text: 'OK' }]
+                  );
+                  return;
+                }
                 
                 navigation.navigate('NavigationScreen', {
                   jobId: jobId,
@@ -217,8 +271,12 @@ const MyJobs = ({ navigation, route }) => {
                     latitude: lat,
                     longitude: lng
                   },
-                  address: job.location?.address || job.pickupAddress?.fullAddress || job.pickupAddress?.street || 'Customer Location'
+                  address: job.pickupAddress?.fullAddress || job.pickupAddress?.street || job.location?.address || 'Customer Location',
+                  payout: job.pricing?.total || job.payout || 0,
+                  description: job.description || ''
                 });
+                
+                console.log('=== END DEBUG ===');
               }
             } catch (error) {
               console.error('Error starting job:', error);
@@ -255,6 +313,19 @@ const MyJobs = ({ navigation, route }) => {
         }
       ]
     );
+  };
+
+  const handleFindDumpster = (job) => {
+    // Navigate to PickupConfirmation at step 5 (dumpster selection)
+    // or directly to NavigationScreen if we want to skip pickup steps
+    navigation.navigate('PickupConfirmation', {
+      jobId: job.id,
+      coordinates: job.pickupAddress?.coordinates || { latitude: 0, longitude: 0 },
+      address: job.pickupAddress?.fullAddress || job.pickupAddress?.street || job.location?.address || '',
+      payout: job.pricing?.contractorPayout || job.contractorEarnings || 0,
+      description: job.description || '',
+      skipToStep: 5, // Go directly to dumpster selection
+    });
   };
 
   const onRefresh = () => {
@@ -320,6 +391,15 @@ const MyJobs = ({ navigation, route }) => {
             onPress={() => handleCompleteJob(item.id)}
           >
             <Text style={styles.actionButtonText}>Complete</Text>
+          </TouchableOpacity>
+        )}
+
+        {item.status === 'picked_up' && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.dumpsterButton]}
+            onPress={() => handleFindDumpster(item)}
+          >
+            <Text style={styles.actionButtonText}>Find Dumpster</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -547,6 +627,18 @@ const MyJobs = ({ navigation, route }) => {
                     <Text style={styles.modalActionButtonText}>Complete Job</Text>
                   </TouchableOpacity>
                 )}
+
+                {selectedJob.status === 'picked_up' && (
+                  <TouchableOpacity
+                    style={[styles.modalActionButton, styles.dumpsterButton]}
+                    onPress={() => {
+                      setShowJobDetails(false);
+                      handleFindDumpster(selectedJob);
+                    }}
+                  >
+                    <Text style={styles.modalActionButtonText}>Find Dumpster</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </ScrollView>
           </View>
@@ -671,6 +763,9 @@ const styles = StyleSheet.create({
   },
   completeButton: {
     backgroundColor: '#F59E0B',
+  },
+  dumpsterButton: {
+    backgroundColor: '#3B82F6',
   },
   actionButtonText: {
     fontSize: 14,

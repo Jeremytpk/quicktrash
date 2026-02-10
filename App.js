@@ -46,6 +46,9 @@ import VehicleInfo from './screens/VehicleInfo';
 import SafetyToolkit from './screens/SafetyToolkit';
 import ContractorStripe from './screens/ContractorStripe'; // Standard import
 import ContractorVerification from './screens/ContractorVerification';
+import NavigationScreen from './screens/NavigationScreen';
+import DumpConfirmationScreen from './screens/DumpConfirmationScreen';
+import PickupConfirmationScreen from './screens/PickupConfirmationScreen';
 
 // Employee screens
 import UserManagement from './screens/UserManagement';
@@ -238,7 +241,22 @@ function App() {
             component={SafetyToolkit} 
             options={{ headerShown: false }} 
           />
-          
+          <Stack.Screen 
+            name="NavigationScreen" 
+            component={NavigationScreen} 
+            options={{ headerShown: true, title: 'Navigation', headerTitleAlign: 'center'}} 
+          />
+          <Stack.Screen
+            name="DumpConfirmation"
+            component={DumpConfirmationScreen}
+            options={{ headerShown: true, title: 'Confirm Dump', headerTitleAlign: 'center'}}
+          />
+          <Stack.Screen
+            name="PickupConfirmation"
+            component={PickupConfirmationScreen}
+            options={{ headerShown: true, title: 'Pickup', headerTitleAlign: 'center'}}
+          />
+
           {/* Employee Screens */}
           <Stack.Screen 
             name="UserManagement" 
