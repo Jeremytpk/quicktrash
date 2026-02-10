@@ -267,7 +267,6 @@ const CreateOrder = ({ navigation, route }) => {
         title="Create Pickup Order"
         showBackButton={true}
         showHomeButton={true}
-        rightComponent={<OrderBasket />}
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

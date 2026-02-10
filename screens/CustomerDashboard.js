@@ -174,17 +174,6 @@ const CustomerDashboard = ({ navigation }) => {
         title="Good morning!"
         subtitle="Ready for pickup?"
         showBackButton={false}
-        rightComponent={
-          <View style={styles.headerActions}>
-            {/* Replaced OrderBasket with a recycling icon */}
-            <TouchableOpacity style={styles.recyclingButton}>
-              <Ionicons name="trash-bin-outline" size={24} color="#333" /> 
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.notificationButton}>
-              <Ionicons name="notifications-outline" size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
-        }
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -234,10 +223,9 @@ const CustomerDashboard = ({ navigation }) => {
             </View>
           ) : recentOrders.length > 0 ? (
             recentOrders.map((order) => (
-              <TouchableOpacity 
+              <View 
                 key={order.id} 
                 style={styles.orderCard}
-                onPress={() => navigation.navigate('OrderHistory')}
               >
                 <View style={styles.orderInfo}>
                   <Text style={styles.orderType}>{order.type}</Text>
@@ -247,7 +235,7 @@ const CustomerDashboard = ({ navigation }) => {
                   <Text style={styles.orderAmount}>{order.amount}</Text>
                   <Text style={[styles.statusText, { color: order.statusColor }]}>{order.status}</Text>
                 </View>
-              </TouchableOpacity>
+              </View>
             ))
           ) : (
             <View style={styles.emptyState}>
