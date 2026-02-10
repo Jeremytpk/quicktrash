@@ -135,7 +135,7 @@ const SideMenu = ({ visible, onClose }) => {
           {
             title: 'Account & Payments',
             items: [
-              { title: 'Payment Methods', icon: 'card-outline', screen: 'PaymentMethods' },
+              // { title: 'Payment Methods', icon: 'card-outline', screen: 'PaymentMethods' },
               { title: 'Profile', icon: 'person-outline', screen: 'Profile' },
               // { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
             ]
