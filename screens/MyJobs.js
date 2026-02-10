@@ -78,11 +78,8 @@ const MyJobs = ({ navigation, route }) => {
     );
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       let jobsList = [];
-      console.log('MyJobs: Query snapshot size:', querySnapshot.size);
-      console.log('MyJobs: Querying with contractorId:', effectiveContractorId);
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        console.log('MyJobs: Job data:', { id: doc.id, status: data.status, contractorId: data.contractorId });
         
         // Calculate distance if job has coordinates
         let distance = 'N/A';
@@ -111,7 +108,6 @@ const MyJobs = ({ navigation, route }) => {
           distance: distance,
         });
       });
-      console.log('MyJobs: Total jobs fetched:', jobsList.length);
       // Filter by UI filter - only show accepted and beyond statuses
       const filteredJobs = jobsList.filter(job => {
         const jobStatus = (job.status || '').toLowerCase();
@@ -119,24 +115,20 @@ const MyJobs = ({ navigation, route }) => {
         
         // Check if status is valid
         if (!validStatuses.includes(jobStatus)) {
-          console.log('MyJobs: Job filtered out - invalid status:', job.status, 'Job ID:', job.id);
           return false;
         }
         
         switch (filter) {
           case 'active':
             const isActive = ['accepted', 'scheduled', 'in_progress', 'picked_up'].includes(jobStatus);
-            console.log('MyJobs: Active filter - Job:', job.id, 'Status:', jobStatus, 'Included:', isActive);
             return isActive;
           case 'completed':
             const isCompleted = jobStatus === 'completed';
-            console.log('MyJobs: Completed filter - Job:', job.id, 'Status:', jobStatus, 'Included:', isCompleted);
             return isCompleted;
           default:
             return true;
         }
       });
-      console.log('MyJobs: Filtered jobs:', filteredJobs.length, 'Filter:', filter);
       setJobs(filteredJobs);
       setLoading(false);
       setRefreshing(false);
@@ -211,30 +203,21 @@ const MyJobs = ({ navigation, route }) => {
               
               // Navigate to NavigationScreen with job details
               if (job) {
-                console.log('=== JOB NAVIGATION DEBUG ===');
-                console.log('Job ID:', jobId);
-                console.log('Job keys:', Object.keys(job));
-                console.log('pickupAddress structure:', job.pickupAddress);
-                console.log('location structure:', job.location);
                 
                 // Get coordinates from pickupAddress (main source)
                 let lat = job.pickupAddress?.coordinates?.latitude;
                 let lng = job.pickupAddress?.coordinates?.longitude;
                 
-                console.log('Step 1 - pickupAddress.coordinates:', { lat, lng });
-                
                 // Fallback: check if coordinates are directly in pickupAddress
                 if (!lat && job.pickupAddress?.latitude) {
                   lat = job.pickupAddress.latitude;
                   lng = job.pickupAddress.longitude;
-                  console.log('Step 2 - pickupAddress flat:', { lat, lng });
                 }
                 
                 // Additional fallback: check location field
                 if (!lat && job.location?.coordinates) {
                   lat = job.location.coordinates.latitude;
                   lng = job.location.coordinates.longitude;
-                  console.log('Step 3 - location.coordinates:', { lat, lng });
                 }
                 
                 // Last resort: geocode the customer's address
@@ -246,15 +229,12 @@ const MyJobs = ({ navigation, route }) => {
                       if (geocoded && geocoded.length > 0) {
                         lat = geocoded[0].latitude;
                         lng = geocoded[0].longitude;
-                        console.log('Geocoded customer address:', { customerAddress, lat, lng });
                       }
                     } catch (geoError) {
                       console.error('Error geocoding customer address:', geoError);
                     }
                   }
                 }
-                
-                console.log('Final extracted coordinates:', { lat, lng });
                 
                 if (!lat || !lng) {
                   Alert.alert(
@@ -275,8 +255,6 @@ const MyJobs = ({ navigation, route }) => {
                   payout: job.pricing?.total || job.payout || 0,
                   description: job.description || ''
                 });
-                
-                console.log('=== END DEBUG ===');
               }
             } catch (error) {
               console.error('Error starting job:', error);
@@ -450,18 +428,6 @@ const MyJobs = ({ navigation, route }) => {
         }
       />
 
-      {/* Debug Info - Remove after testing */}
-      {__DEV__ && (
-        <View style={{ backgroundColor: '#FFF3E0', padding: 8, marginHorizontal: 16, marginTop: 8, borderRadius: 4 }}>
-          <Text style={{ fontSize: 12, color: '#E65100' }}>
-            Debug: User ID: {user?.uid?.slice(0, 8) || 'N/A'} | Contractor ID: {(contractorId || user?.uid)?.slice(0, 8) || 'N/A'}
-          </Text>
-          <Text style={{ fontSize: 12, color: '#E65100' }}>
-            Jobs found: {jobs.length} | Filter: {filter} | Loading: {loading ? 'Yes' : 'No'}
-          </Text>
-        </View>
-      )}
-
       <FlatList
         data={jobs}
         renderItem={renderJobCard}
@@ -569,8 +535,6 @@ const MyJobs = ({ navigation, route }) => {
                         url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
                       }
                     }
-                    
-                    console.log('Opening navigation:', { lat, lng, address, url });
                     
                     if (Platform.OS === 'web') {
                       window.open(url, '_blank');

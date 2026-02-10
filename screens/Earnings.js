@@ -184,7 +184,7 @@ const Earnings = () => {
           setPaymentInfo({
             method,
             account,
-            schedule: data.paymentSchedule || 'Payments are processed weekly on Mondays for the previous week\'s earnings.'
+            schedule: data.paymentSchedule || 'You can withdraw your earnings anytime. Funds are instantly transferred to your saved payment method.'
           });
         }
       } catch (error) {
@@ -445,14 +445,17 @@ const Earnings = () => {
                 <Text style={styles.paymentMethod}>{paymentInfo.method}</Text>
                 <Text style={styles.paymentAccount}>{paymentInfo.account}</Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <TouchableOpacity onPress={() => navigation.navigate('PaymentMethods')}>
-                  <Text style={styles.changeText}>Change</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.withdrawButton} onPress={handleWithdraw}>
-                  <Text style={styles.withdrawText}>Withdraw</Text>
-                </TouchableOpacity>
-              </View>
+            </View>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity 
+                style={styles.changeButton}
+                onPress={() => navigation.navigate('PaymentMethods')}
+              >
+                <Text style={styles.changeButtonText}>Change</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.withdrawButton} onPress={handleWithdraw}>
+                <Text style={styles.withdrawText}>Withdraw</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.paymentSchedule}>
               <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
@@ -574,18 +577,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
-  },
-  withdrawButton: {
-    marginLeft: 12,
-    backgroundColor: '#34A853',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  withdrawText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
   },
   // --- Start of existing styles ---
   container: {
@@ -837,7 +828,7 @@ const styles = StyleSheet.create({
   paymentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   paymentIconContainer: {
     width: 40,
@@ -855,11 +846,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 2,
+    top: 8,
   },
   paymentAccount: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  changeButton: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  changeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  withdrawButton: {
+    flex: 1,
+    backgroundColor: '#34A853',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  withdrawText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
   changeText: {
     fontSize: 14,

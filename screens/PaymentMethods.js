@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, Linking, ActivityIndicator } from 'react-native';
 import { CardField, useStripe } from '@stripe/stripe-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '../contexts/UserContext';
 import { db } from '../firebaseConfig';
-import { collection, getDocs, setDoc, doc, deleteDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, setDoc, doc, deleteDoc, getDoc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import SharedHeader from '../components/SharedHeader';
 import { useNavigation } from '@react-navigation/native';
 
@@ -20,6 +20,8 @@ const PaymentMethods = () => {
 
   const [creatingStripeAccount, setCreatingStripeAccount] = useState(false);
   const [onboardingUrl, setOnboardingUrl] = useState(null);
+  const [recentPayouts, setRecentPayouts] = useState([]);
+  const [loadingPayouts, setLoadingPayouts] = useState(false);
 
   // Ensure this function is defined before the return statement
   const handleCreateStripeAccount = async () => {
@@ -122,6 +124,38 @@ const PaymentMethods = () => {
       }
     };
     fetchAllMethods();
+  }, [user]);
+
+  // Sync payouts from Stripe then listen to Firestore payouts subcollection
+  React.useEffect(() => {
+    if (!user?.uid) return;
+
+    setLoadingPayouts(true);
+
+    // Trigger a sync from Stripe into Firestore (fire-and-forget)
+    fetch('https://us-central1-quicktrash-1cdff.cloudfunctions.net/api/sync-contractor-payouts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.uid }),
+    }).catch(err => console.log('Payout sync error:', err.message));
+
+    // Listen to payouts subcollection in real-time
+    const payoutsQuery = query(
+      collection(db, 'users', user.uid, 'payouts'),
+      orderBy('createdAt', 'desc'),
+      limit(10)
+    );
+
+    const unsubscribe = onSnapshot(payoutsQuery, (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setRecentPayouts(data);
+      setLoadingPayouts(false);
+    }, (err) => {
+      console.error('Error listening to payouts:', err);
+      setLoadingPayouts(false);
+    });
+
+    return () => unsubscribe();
   }, [user]);
 
   const handleAddCard = async () => {
@@ -369,6 +403,51 @@ const PaymentMethods = () => {
           </View>
         )}
 
+        {/* Recent Payouts & Transfers */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Recent Payouts</Text>
+          {loadingPayouts ? (
+            <ActivityIndicator size="small" color="#34A853" style={{ marginVertical: 20 }} />
+          ) : recentPayouts.length > 0 ? (
+            recentPayouts.map(item => {
+              const isTransfer = item.type === 'transfer';
+              const date = item.createdAt?.toDate ? item.createdAt.toDate() : (item.createdAt?.seconds ? new Date(item.createdAt.seconds * 1000) : null);
+              const statusColor = item.status === 'paid' ? '#34A853' : item.status === 'pending' ? '#F59E0B' : item.status === 'failed' ? '#EF4444' : '#6B7280';
+              return (
+                <View key={item.id} style={styles.payoutHistoryCard}>
+                  <View style={styles.payoutHistoryRow}>
+                    <View style={[styles.payoutTypeIcon, { backgroundColor: isTransfer ? '#EFF6FF' : '#F0FDF4' }]}>
+                      <Ionicons
+                        name={isTransfer ? 'arrow-down-outline' : 'wallet-outline'}
+                        size={20}
+                        color={isTransfer ? '#3B82F6' : '#34A853'}
+                      />
+                    </View>
+                    <View style={styles.payoutHistoryInfo}>
+                      <Text style={styles.payoutHistoryAmount}>${(item.amount || 0).toFixed(2)}</Text>
+                      <Text style={styles.payoutHistoryLabel}>
+                        {isTransfer ? 'Transfer from platform' : 'Payout to bank/card'}
+                      </Text>
+                      {date && (
+                        <Text style={styles.payoutHistoryDate}>
+                          {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={[styles.payoutStatusBadge, { backgroundColor: statusColor + '20' }]}>
+                      <Text style={[styles.payoutStatusText, { color: statusColor }]}>
+                        {(item.status || 'unknown').charAt(0).toUpperCase() + (item.status || 'unknown').slice(1)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <Text style={styles.emptyState}>No payouts or transfers yet.</Text>
+          )}
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Add Payout Card</Text>
           <Text style={styles.infoText}>Add a debit card to receive instant payouts. Credit cards are not supported for payouts.</Text>
@@ -462,11 +541,61 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
     marginLeft: 12,
   },
-  emptyState: { 
-    textAlign: 'center', 
-    color: '#9CA3AF', 
+  emptyState: {
+    textAlign: 'center',
+    color: '#9CA3AF',
     marginTop: 32,
     fontSize: 16,
+  },
+  payoutHistoryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  payoutHistoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  payoutTypeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  payoutHistoryInfo: {
+    flex: 1,
+  },
+  payoutHistoryAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  payoutHistoryLabel: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  payoutHistoryDate: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  payoutStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  payoutStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   infoText: {
     fontSize: 14,

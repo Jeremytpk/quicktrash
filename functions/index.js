@@ -903,6 +903,25 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
         } catch (firestoreError) {
           console.error('Webhook: Error updating job payout status after payout.paid:', firestoreError);
         }
+
+        // Update payout status in payouts subcollection
+        try {
+          await admin.firestore().collection('users').doc(contractorUserId).collection('payouts').doc(payout.id).set({
+            type: 'payout',
+            stripeId: payout.id,
+            amount: payout.amount / 100,
+            currency: payout.currency || 'usd',
+            status: 'paid',
+            description: payout.description || 'QuickTrash Payout',
+            method: payout.method || 'standard',
+            createdAt: admin.firestore.Timestamp.fromMillis(payout.created * 1000),
+            syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+            metadata: payout.metadata || {},
+          }, { merge: true });
+          console.log(`Webhook: Updated payout ${payout.id} status to paid in subcollection`);
+        } catch (e) {
+          console.error('Webhook: Error updating payout subcollection:', e.message);
+        }
       }
       break;
     default:
