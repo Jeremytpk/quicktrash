@@ -57,6 +57,8 @@ import JobMonitoring from './screens/JobMonitoring';
 import Analytics from './screens/Analytics';
 import Disputes from './screens/Disputes';
 import Revenue from './screens/Revenue';
+import AdminTools from './screens/AdminTools';
+import PricingManagement from './screens/PricingManagement';
 
 
 // Create the stack navigator
@@ -282,6 +284,16 @@ function App() {
             name="Revenue"
             component={Revenue}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen 
+            name="AdminTools" 
+            component={AdminTools} 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="PricingManagement" 
+            component={PricingManagement} 
+            options={{ headerShown: false }} 
           />
           <Stack.Screen 
             name="Accounts" 

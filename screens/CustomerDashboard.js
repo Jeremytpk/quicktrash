@@ -9,17 +9,27 @@ import {
   Image,
   Modal,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import SharedHeader from '../components/SharedHeader';
 // import OrderBasket from '../components/OrderBasket'; // Removed OrderBasket
 import LocationService from '../services/LocationService';
+import { useUser } from '../contexts/UserContext';
+import { db } from '../firebaseConfig';
+import { collection, query, where, onSnapshot, orderBy, limit, doc, getDoc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
 const CustomerDashboard = ({ navigation }) => {
+  const { user } = useUser();
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [pricingData, setPricingData] = useState(null);
+  const [loadingPricing, setLoadingPricing] = useState(true);
 
   useEffect(() => {
     // Initialize location service for customers (with Atlanta default)
@@ -34,6 +44,36 @@ const CustomerDashboard = ({ navigation }) => {
     initLocation();
   }, []);
 
+  // Fetch pricing data from Firestore
+  useEffect(() => {
+    fetchPricingData();
+  }, []);
+
+  // Refetch pricing when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchPricingData();
+    }, [])
+  );
+
+  const fetchPricingData = async () => {
+    try {
+      setLoadingPricing(true);
+      const pricingDoc = await getDoc(doc(db, 'pricings', 'default'));
+      
+      if (pricingDoc.exists()) {
+        console.log('Fetched pricing data:', pricingDoc.data());
+        setPricingData(pricingDoc.data());
+      } else {
+        console.log('No pricing document found');
+      }
+    } catch (error) {
+      console.error('Error fetching pricing:', error);
+    } finally {
+      setLoadingPricing(false);
+    }
+  };
+
   const wasteTypes = [
     { id: 'household', name: 'Household Trash', icon: 'home', color: '#34A853' },
     { id: 'bulk', name: 'Bulk Items', icon: 'cube', color: '#FF8F00' },
@@ -42,16 +82,79 @@ const CustomerDashboard = ({ navigation }) => {
     { id: 'recyclables', name: 'Recyclables', icon: 'refresh', color: '#2196F3' },
   ];
 
-  const volumeSizes = [
-    { id: 'bags', name: '1-5 Bags', description: 'Small household bags', price: '$1' },
-    { id: 'pickup_load', name: 'Pickup Load', description: 'Half truck bed', price: '$1' },
-    { id: 'trailer_load', name: 'Trailer Load', description: 'Full trailer', price: '$1' },
+  // Volume sizes from pricing data
+  const volumeSizes = pricingData?.volumeOptions || [
+    { id: '1-5_bags', name: '1-5 Bags', description: 'Small household bags', icon: 'bag', basePrice: 15 },
+    { id: 'pickup_load', name: 'Pickup Load', description: 'Half truck bed', icon: 'car', basePrice: 45 },
+    { id: 'trailer_load', name: 'Trailer Load', description: 'Full trailer', icon: 'bus', basePrice: 85 },
   ];
 
-  const recentOrders = [
-    { id: 1, type: 'Household Trash', date: '2025-08-28', status: 'Completed', amount: '$1' },
-    { id: 2, type: 'Bulk Items', date: '2025-08-25', status: 'Completed', amount: '$1' },
-  ];
+  // Fetch recent orders from Firestore
+  useEffect(() => {
+    if (!user) return;
+
+    setLoadingOrders(true);
+    const jobsRef = collection(db, 'jobs');
+    const q = query(
+      jobsRef,
+      where('customerId', '==', user.uid),
+      orderBy('createdAt', 'desc'),
+      limit(5)
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const orders = [];
+      querySnapshot.forEach((doc) => {
+        const jobData = doc.data();
+        orders.push({
+          id: doc.id,
+          type: jobData.wasteType || 'General Waste',
+          date: jobData.createdAt?.toDate ? jobData.createdAt.toDate().toLocaleDateString() : 'N/A',
+          status: getStatusDisplay(jobData.status),
+          amount: jobData.pricing?.total ? `$${jobData.pricing.total.toFixed(2)}` : '$0',
+          statusColor: getStatusColor(jobData.status),
+          rawStatus: jobData.status,
+        });
+      });
+      setRecentOrders(orders);
+      setLoadingOrders(false);
+    }, (error) => {
+      console.error('Error fetching recent orders:', error);
+      setLoadingOrders(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const getStatusDisplay = (status) => {
+    const statusMap = {
+      'pending': 'Pending Payment',
+      'paid': 'Paid',
+      'available': 'Available',
+      'accepted': 'Accepted',
+      'scheduled': 'Scheduled',
+      'in_progress': 'In Progress',
+      'picked_up': 'Picked Up',
+      'completed': 'Completed',
+      'cancelled': 'Cancelled',
+    };
+    return statusMap[status] || status;
+  };
+
+  const getStatusColor = (status) => {
+    const colorMap = {
+      'pending': '#F59E0B',
+      'paid': '#3B82F6',
+      'available': '#8B5CF6',
+      'accepted': '#6366F1',
+      'scheduled': '#0EA5E9',
+      'in_progress': '#F97316',
+      'picked_up': '#FB923C',
+      'completed': '#34A853',
+      'cancelled': '#EF4444',
+    };
+    return colorMap[status] || '#6B7280';
+  };
 
   const handleNewOrder = () => {
     setShowOrderModal(true);
@@ -59,7 +162,10 @@ const CustomerDashboard = ({ navigation }) => {
 
   const handleOrderType = (wasteType) => {
     setShowOrderModal(false);
-    navigation.navigate('CreateOrder', { wasteType });
+    navigation.navigate('CreateOrder', { 
+      wasteType,
+      pricingData // Pass pricing data to CreateOrder
+    });
   };
 
   return (
@@ -121,18 +227,27 @@ const CustomerDashboard = ({ navigation }) => {
             </TouchableOpacity>
           </View>
           
-          {recentOrders.length > 0 ? (
+          {loadingOrders ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#34A853" />
+              <Text style={styles.loadingText}>Loading orders...</Text>
+            </View>
+          ) : recentOrders.length > 0 ? (
             recentOrders.map((order) => (
-              <View key={order.id} style={styles.orderCard}>
+              <TouchableOpacity 
+                key={order.id} 
+                style={styles.orderCard}
+                onPress={() => navigation.navigate('OrderHistory')}
+              >
                 <View style={styles.orderInfo}>
                   <Text style={styles.orderType}>{order.type}</Text>
                   <Text style={styles.orderDate}>{order.date}</Text>
                 </View>
                 <View style={styles.orderStatus}>
                   <Text style={styles.orderAmount}>{order.amount}</Text>
-                  <Text style={[styles.statusText, { color: '#34A853' }]}>{order.status}</Text>
+                  <Text style={[styles.statusText, { color: order.statusColor }]}>{order.status}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
           ) : (
             <View style={styles.emptyState}>
@@ -316,6 +431,17 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 30,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
   },
   emptyStateText: {
     fontSize: 16,

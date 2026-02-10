@@ -222,6 +222,23 @@ app.post('/contractor-payout', async (req, res) => {
 
     console.log(`Transfer created: ${transfer.id} for $${amount} to account ${stripeAccountId}`);
 
+    // Record transfer in payouts subcollection
+    try {
+      await admin.firestore().collection('users').doc(userId).collection('payouts').doc(transfer.id).set({
+        type: 'transfer',
+        stripeId: transfer.id,
+        amount: amount,
+        currency: 'usd',
+        status: 'paid',
+        description: transfer.description || `Payout to contractor ${userId}`,
+        createdAt: admin.firestore.Timestamp.fromMillis(transfer.created * 1000),
+        syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+        metadata: transfer.metadata || {},
+      });
+    } catch (e) {
+      console.error('Error recording transfer in payouts subcollection:', e.message);
+    }
+
     // Update all completed jobs for this contractor to mark them as paid out
     try {
       const jobsSnapshot = await admin.firestore()
@@ -265,6 +282,23 @@ app.post('/contractor-payout', async (req, res) => {
         }
       );
       console.log(`Instant payout created: ${payout.id}`);
+      // Record payout in payouts subcollection
+      try {
+        await admin.firestore().collection('users').doc(userId).collection('payouts').doc(payout.id).set({
+          type: 'payout',
+          stripeId: payout.id,
+          amount: amount,
+          currency: 'usd',
+          status: payout.status || 'pending',
+          description: 'QuickTrash Payout (instant)',
+          method: 'instant',
+          createdAt: admin.firestore.Timestamp.fromMillis(payout.created * 1000),
+          syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+          metadata: { userId, type: 'contractor_payout' },
+        });
+      } catch (e) {
+        console.error('Error recording instant payout in subcollection:', e.message);
+      }
       res.json({ success: true, transfer, payout });
     } catch (payoutError) {
       console.log('Instant payout failed, will use standard payout:', payoutError.message);
@@ -282,6 +316,23 @@ app.post('/contractor-payout', async (req, res) => {
           }
         );
         console.log(`Standard payout created: ${payout.id}`);
+        // Record payout in payouts subcollection
+        try {
+          await admin.firestore().collection('users').doc(userId).collection('payouts').doc(payout.id).set({
+            type: 'payout',
+            stripeId: payout.id,
+            amount: amount,
+            currency: 'usd',
+            status: payout.status || 'pending',
+            description: 'QuickTrash Payout (standard)',
+            method: 'standard',
+            createdAt: admin.firestore.Timestamp.fromMillis(payout.created * 1000),
+            syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+            metadata: { userId, type: 'contractor_payout' },
+          });
+        } catch (e) {
+          console.error('Error recording standard payout in subcollection:', e.message);
+        }
         res.json({ success: true, transfer, payout });
       } catch (standardPayoutError) {
         console.log('Standard payout also failed:', standardPayoutError.message);
@@ -690,6 +741,24 @@ app.post('/withdraw-to-card', async (req, res) => {
       }
 
       await ref.update({ status: 'completed', stripePayoutId: payout.id });
+
+      // Record payout in payouts subcollection
+      try {
+        await admin.firestore().collection('users').doc(userId).collection('payouts').doc(payout.id).set({
+          type: 'payout',
+          stripeId: payout.id,
+          amount: Number(amount),
+          currency: 'usd',
+          status: 'pending',
+          description: 'QuickTrash Withdrawal (card)',
+          method: 'standard',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+          metadata: { userId, type: 'contractor_withdrawal' },
+        });
+      } catch (e) {
+        console.error('Error recording withdrawal payout in subcollection:', e.message);
+      }
 
       // Mark all completed jobs for this contractor as paid out (when contractor withdraws)
       try {
@@ -1186,6 +1255,127 @@ app.get('/contractor-transfers', async (req, res) => {
     });
   } catch (err) {
     console.error('contractor-transfers error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- SYNC CONTRACTOR PAYOUTS ---
+// Fetches all Stripe transfers + payouts for a contractor and stores them in Firestore
+// URL: /api/sync-contractor-payouts
+app.post('/sync-contractor-payouts', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, error: 'userId required' });
+
+    // Fetch user profile from Firestore
+    const userDoc = await admin.firestore().collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    const userData = userDoc.data();
+    const stripeAccountId = userData.stripeConnectedAccountId;
+
+    if (!stripeAccountId) {
+      return res.json({ success: true, transferCount: 0, payoutCount: 0, message: 'No Stripe account connected' });
+    }
+
+    const payoutsRef = admin.firestore().collection('users').doc(userId).collection('payouts');
+
+    // Fetch Stripe transfers (platform → connected account)
+    let transfers = [];
+    try {
+      let hasMore = true;
+      let startingAfter;
+      while (hasMore) {
+        const params = { destination: stripeAccountId, limit: 100 };
+        if (startingAfter) params.starting_after = startingAfter;
+        const resp = await stripe.transfers.list(params);
+        transfers = transfers.concat(resp.data);
+        hasMore = resp.has_more;
+        if (hasMore) startingAfter = resp.data[resp.data.length - 1].id;
+      }
+    } catch (e) {
+      console.log('Could not fetch Stripe transfers:', e.message);
+    }
+
+    // Fetch Stripe payouts (connected account → bank/card)
+    let payouts = [];
+    try {
+      let hasMore = true;
+      let startingAfter;
+      while (hasMore) {
+        const params = { limit: 100 };
+        if (startingAfter) params.starting_after = startingAfter;
+        const resp = await stripe.payouts.list(params, { stripeAccount: stripeAccountId });
+        payouts = payouts.concat(resp.data);
+        hasMore = resp.has_more;
+        if (hasMore) startingAfter = resp.data[resp.data.length - 1].id;
+      }
+    } catch (e) {
+      console.log('Could not fetch Stripe payouts:', e.message);
+    }
+
+    // Batch write transfers to Firestore
+    const batchSize = 500; // Firestore batch limit
+    let batch = admin.firestore().batch();
+    let batchCount = 0;
+
+    for (const t of transfers) {
+      const docRef = payoutsRef.doc(t.id);
+      batch.set(docRef, {
+        type: 'transfer',
+        stripeId: t.id,
+        amount: t.amount / 100,
+        currency: t.currency,
+        status: t.reversed ? 'reversed' : 'paid',
+        description: t.description || '',
+        createdAt: admin.firestore.Timestamp.fromMillis(t.created * 1000),
+        syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+        metadata: t.metadata || {},
+      }, { merge: true });
+      batchCount++;
+      if (batchCount >= batchSize) {
+        await batch.commit();
+        batch = admin.firestore().batch();
+        batchCount = 0;
+      }
+    }
+
+    // Batch write payouts to Firestore
+    for (const p of payouts) {
+      const docRef = payoutsRef.doc(p.id);
+      batch.set(docRef, {
+        type: 'payout',
+        stripeId: p.id,
+        amount: p.amount / 100,
+        currency: p.currency,
+        status: p.status,
+        description: p.description || '',
+        method: p.method || 'standard',
+        createdAt: admin.firestore.Timestamp.fromMillis(p.created * 1000),
+        syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+        metadata: p.metadata || {},
+      }, { merge: true });
+      batchCount++;
+      if (batchCount >= batchSize) {
+        await batch.commit();
+        batch = admin.firestore().batch();
+        batchCount = 0;
+      }
+    }
+
+    // Commit remaining
+    if (batchCount > 0) {
+      await batch.commit();
+    }
+
+    res.json({
+      success: true,
+      transferCount: transfers.length,
+      payoutCount: payouts.length,
+    });
+  } catch (err) {
+    console.error('sync-contractor-payouts error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });

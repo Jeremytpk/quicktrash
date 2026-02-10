@@ -345,6 +345,7 @@ const PaymentMethods = () => {
                 </View>
               </View>
               <View style={styles.accountButtonRow}>
+                {/* Commented out - Complete Verification
                 <TouchableOpacity 
                   style={styles.verifyButton} 
                   onPress={() => navigation.navigate('ContractorVerification')}
@@ -352,6 +353,7 @@ const PaymentMethods = () => {
                   <Ionicons name="shield-checkmark" size={16} color="#3B82F6" style={{ marginRight: 6 }} />
                   <Text style={styles.verifyButtonText}>Complete Verification</Text>
                 </TouchableOpacity>
+                */}
                 <TouchableOpacity 
                   style={styles.deleteAccountButton} 
                   onPress={handleDeleteStripeAccount}

@@ -137,7 +137,7 @@ const SideMenu = ({ visible, onClose }) => {
             items: [
               { title: 'Payment Methods', icon: 'card-outline', screen: 'PaymentMethods' },
               { title: 'Profile', icon: 'person-outline', screen: 'Profile' },
-              { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
+              // { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
             ]
           },
           {
@@ -172,7 +172,7 @@ const SideMenu = ({ visible, onClose }) => {
             title: 'Account & Settings',
             items: [
               { title: 'Profile', icon: 'person-outline', screen: 'Profile' },
-              { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
+              // { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
               { title: 'Settings', icon: 'settings-outline', screen: 'Settings' },
               { title: 'Help & FAQ', icon: 'help-circle-outline', screen: 'HelpFAQ' },
             ]
@@ -201,7 +201,7 @@ const SideMenu = ({ visible, onClose }) => {
             title: 'Personal',
             items: [
               { title: 'Profile', icon: 'person-outline', screen: 'Profile' },
-              { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
+              // { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
               { title: 'Settings', icon: 'settings-outline', screen: 'Settings' },
               { title: 'Help & FAQ', icon: 'help-circle-outline', screen: 'HelpFAQ' },
             ]
@@ -214,7 +214,7 @@ const SideMenu = ({ visible, onClose }) => {
             title: 'General',
             items: [
               { title: 'Profile', icon: 'person-outline', screen: 'Profile' },
-              { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
+              // { title: 'Notifications', icon: 'notifications-outline', screen: 'Notifications' },
               { title: 'Settings', icon: 'settings-outline', screen: 'Settings' },
               { title: 'Help & FAQ', icon: 'help-circle-outline', screen: 'HelpFAQ' },
             ]

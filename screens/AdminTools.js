@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
 import { db } from '../firebaseConfig';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, collection, query, getDocs, serverTimestamp } from 'firebase/firestore';
 
 const AdminTools = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
@@ -27,13 +27,6 @@ const AdminTools = ({ navigation }) => {
     serviceHours: {
       start: '06:00',
       end: '22:00'
-    },
-    basePricing: {
-      household: 15.00,
-      bulk: 25.00,
-      yard: 20.00,
-      construction: 35.00,
-      recyclables: 10.00
     },
     serviceFeePercentage: 15,
     contractorPayoutPercentage: 80,
@@ -48,7 +41,6 @@ const AdminTools = ({ navigation }) => {
     fetchSystemSettings();
   }, []);
 
-  const [showPricingModal, setShowPricingModal] = useState(false);
   const [showSystemModal, setShowSystemModal] = useState(false);
   const [editingSettings, setEditingSettings] = useState(null);
   const [systemHealth, setSystemHealth] = useState({
@@ -69,7 +61,6 @@ const AdminTools = ({ navigation }) => {
         setSystemSettings(prevSettings => ({
           ...prevSettings,
           ...configData,
-          basePricing: configData.pricing?.baseFees || prevSettings.basePricing,
           serviceFeePercentage: (configData.pricing?.serviceFeePercentage || 0.15) * 100,
           contractorPayoutPercentage: (configData.pricing?.contractorPayoutPercentage || 0.80) * 100
         }));
@@ -129,7 +120,7 @@ const AdminTools = ({ navigation }) => {
       description: 'Configure pricing for different service types and market conditions',
       icon: 'cash-outline',
       color: '#10B981',
-      action: () => setShowPricingModal(true)
+      action: () => navigation.navigate('PricingManagement')
     },
     {
       id: 'service-areas',
@@ -207,31 +198,6 @@ const AdminTools = ({ navigation }) => {
     }
   };
 
-  const handlePricingUpdate = async () => {
-    try {
-      setLoading(true);
-      
-      // Update pricing in Firebase
-      const configRef = doc(db, 'appConfig', 'systemSettings');
-      await updateDoc(configRef, {
-        pricing: {
-          baseFees: systemSettings.basePricing,
-          serviceFeePercentage: systemSettings.serviceFeePercentage / 100,
-          contractorPayoutPercentage: systemSettings.contractorPayoutPercentage / 100
-        },
-        updatedAt: serverTimestamp()
-      });
-      
-      Alert.alert('Success', 'Pricing updated successfully');
-      setShowPricingModal(false);
-    } catch (error) {
-      console.error('Error updating pricing:', error);
-      Alert.alert('Error', 'Failed to update pricing');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const renderToolCard = ({ item: tool }) => (
     <TouchableOpacity style={styles.toolCard} onPress={tool.action}>
       <View style={styles.toolHeader}>
@@ -245,145 +211,6 @@ const AdminTools = ({ navigation }) => {
         <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
       </View>
     </TouchableOpacity>
-  );
-
-  const PricingModal = () => (
-    <Modal
-      visible={showPricingModal}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={() => setShowPricingModal(false)}
-    >
-      <SafeAreaView style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Pricing Management</Text>
-          <TouchableOpacity onPress={() => setShowPricingModal(false)}>
-            <Ionicons name="close" size={24} color="#6B7280" />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.modalContent}>
-          <View style={styles.pricingSection}>
-            <Text style={styles.sectionTitle}>Base Pricing</Text>
-            <View style={styles.pricingGrid}>
-              <View style={styles.pricingItem}>
-                <Text style={styles.pricingLabel}>Household</Text>
-                <TextInput
-                  style={styles.pricingInput}
-                  value={`$${systemSettings.basePricing.household.toFixed(2)}`}
-                  keyboardType="numeric"
-                  onChangeText={(text) => {
-                    const value = parseFloat(text.replace('$', '')) || 0;
-                    setSystemSettings({
-                      ...systemSettings,
-                      basePricing: { ...systemSettings.basePricing, household: value }
-                    });
-                  }}
-                />
-              </View>
-              <View style={styles.pricingItem}>
-                <Text style={styles.pricingLabel}>Bulk</Text>
-                <TextInput
-                  style={styles.pricingInput}
-                  value={`$${systemSettings.basePricing.bulk.toFixed(2)}`}
-                  keyboardType="numeric"
-                  onChangeText={(text) => {
-                    const value = parseFloat(text.replace('$', '')) || 0;
-                    setSystemSettings({
-                      ...systemSettings,
-                      basePricing: { ...systemSettings.basePricing, bulk: value }
-                    });
-                  }}
-                />
-              </View>
-              <View style={styles.pricingItem}>
-                <Text style={styles.pricingLabel}>Yard Waste</Text>
-                <TextInput
-                  style={styles.pricingInput}
-                  value={`$${systemSettings.basePricing.yard.toFixed(2)}`}
-                  keyboardType="numeric"
-                  onChangeText={(text) => {
-                    const value = parseFloat(text.replace('$', '')) || 0;
-                    setSystemSettings({
-                      ...systemSettings,
-                      basePricing: { ...systemSettings.basePricing, yard: value }
-                    });
-                  }}
-                />
-              </View>
-              <View style={styles.pricingItem}>
-                <Text style={styles.pricingLabel}>Construction</Text>
-                <TextInput
-                  style={styles.pricingInput}
-                  value={`$${systemSettings.basePricing.construction.toFixed(2)}`}
-                  keyboardType="numeric"
-                  onChangeText={(text) => {
-                    const value = parseFloat(text.replace('$', '')) || 0;
-                    setSystemSettings({
-                      ...systemSettings,
-                      basePricing: { ...systemSettings.basePricing, construction: value }
-                    });
-                  }}
-                />
-              </View>
-              <View style={styles.pricingItem}>
-                <Text style={styles.pricingLabel}>Recyclables</Text>
-                <TextInput
-                  style={styles.pricingInput}
-                  value={`$${systemSettings.basePricing.recyclables.toFixed(2)}`}
-                  keyboardType="numeric"
-                  onChangeText={(text) => {
-                    const value = parseFloat(text.replace('$', '')) || 0;
-                    setSystemSettings({
-                      ...systemSettings,
-                      basePricing: { ...systemSettings.basePricing, recyclables: value }
-                    });
-                  }}
-                />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.pricingSection}>
-            <Text style={styles.sectionTitle}>Fee Structure</Text>
-            <View style={styles.feeItem}>
-              <Text style={styles.feeLabel}>Service Fee Percentage</Text>
-              <TextInput
-                style={styles.feeInput}
-                value={`${systemSettings.serviceFeePercentage}%`}
-                keyboardType="numeric"
-                onChangeText={(text) => {
-                  const value = parseInt(text.replace('%', '')) || 0;
-                  setSystemSettings({ ...systemSettings, serviceFeePercentage: value });
-                }}
-              />
-            </View>
-            <View style={styles.feeItem}>
-              <Text style={styles.feeLabel}>Contractor Payout Percentage</Text>
-              <TextInput
-                style={styles.feeInput}
-                value={`${systemSettings.contractorPayoutPercentage}%`}
-                keyboardType="numeric"
-                onChangeText={(text) => {
-                  const value = parseInt(text.replace('%', '')) || 0;
-                  setSystemSettings({ ...systemSettings, contractorPayoutPercentage: value });
-                }}
-              />
-            </View>
-          </View>
-
-          <TouchableOpacity 
-            style={styles.saveButton}
-            onPress={handlePricingUpdate}
-            disabled={loading}
-          >
-            <Text style={styles.saveButtonText}>
-              {loading ? 'Updating...' : 'Save Pricing Changes'}
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
   );
 
   const SystemModal = () => (
@@ -574,7 +401,6 @@ const AdminTools = ({ navigation }) => {
         </View>
       </ScrollView>
 
-      <PricingModal />
       <SystemModal />
     </SafeAreaView>
   );
@@ -684,6 +510,8 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: '#1F2937',
+    flex: 1,
+    textAlign: 'center',
   },
   modalContent: {
     flex: 1,
@@ -754,31 +582,113 @@ const styles = StyleSheet.create({
   pricingSection: {
     marginBottom: 24,
   },
+  sectionDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  wasteTypesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  wasteTypeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  wasteTypeChipText: {
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
   pricingGrid: {
     gap: 12,
   },
   pricingItem: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  pricingItemHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    marginBottom: 12,
+    gap: 12,
+  },
+  pricingItemInfo: {
+    flex: 1,
   },
   pricingLabel: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#1F2937',
+    marginBottom: 4,
+  },
+  pricingDescription: {
+    fontSize: 14,
+    color: '#6B7280',
   },
   pricingInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     fontSize: 16,
+    fontWeight: '600',
     color: '#1F2937',
-    minWidth: 80,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     textAlign: 'center',
+  },
+  bagSizeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E0E7FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bagSizeIconText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3B82F6',
+  },
+  pricingExample: {
+    flexDirection: 'row',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  pricingExampleText: {
+    flex: 1,
+  },
+  pricingExampleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E40AF',
+    marginBottom: 4,
+  },
+  pricingExampleDescription: {
+    fontSize: 14,
+    color: '#3B82F6',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  pricingExampleSample: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontStyle: 'italic',
   },
   feeItem: {
     flexDirection: 'row',
@@ -810,11 +720,199 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 24,
+    marginBottom: 32,
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  wasteTypeGrid: {
+    gap: 12,
+  },
+  wasteTypeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 12,
+  },
+  wasteTypeCardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  wasteTypeCardName: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  bagSizeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  bagSizeCard: {
+    flex: 1,
+    minWidth: 90,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  bagSizeName: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginTop: 8,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  bagSizeInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3B82F6',
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    minWidth: 50,
+  },
+  wasteTypeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  wasteTypeHeaderIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  wasteTypeHeaderText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  volumeSection: {
+    marginBottom: 20,
+  },
+  volumeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    gap: 8,
+  },
+  volumeTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  volumeSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginLeft: 'auto',
+  },
+  priceTable: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    borderTopWidth: 0,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  priceRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  bagSizeIconSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E0E7FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bagSizeIconSmallText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3B82F6',
+  },
+  priceRowInfo: {
+    flex: 1,
+  },
+  priceRowLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  priceRowDescription: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  priceRowDefault: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  priceRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  priceRowInput: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    minWidth: 80,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  priceRowInputCustom: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#3B82F6',
+    color: '#3B82F6',
+  },
+  resetButton: {
+    padding: 4,
   },
 });
 

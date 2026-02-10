@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SharedHeader from '../components/SharedHeader';
@@ -19,18 +20,81 @@ import {
   onSnapshot, 
   doc, 
   updateDoc,
-  orderBy 
+  orderBy,
+  getDocs 
 } from 'firebase/firestore';
 
 const Notifications = () => {
-  const { userRole } = useUser();
+  const { user, userRole } = useUser();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    fetchNotifications();
-  }, []);
+    if (user && userRole === 'contractor') {
+      fetchContractorPayouts();
+    } else {
+      fetchNotifications();
+    }
+  }, [user, userRole]);
+
+  const fetchContractorPayouts = async () => {
+    if (!user) return;
+    
+    try {
+      setLoading(true);
+      const jobsRef = collection(db, 'jobs');
+      const q = query(
+        jobsRef,
+        where('contractorId', '==', user.uid),
+        where('status', '==', 'completed'),
+        orderBy('completedAt', 'desc')
+      );
+
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const payoutNotifications = [];
+        
+        querySnapshot.forEach((doc) => {
+          const jobData = doc.data();
+          const payout = jobData.pricing?.contractorPayout || 0;
+          
+          // Create notification for each completed job with payout
+          payoutNotifications.push({
+            id: doc.id,
+            type: 'payment_received',
+            title: 'Payment Received',
+            message: `You received $${payout.toFixed(2)} for ${jobData.wasteType || 'pickup'} job at ${jobData.pickupAddress?.fullAddress || 'location'}.`,
+            timestamp: jobData.completedAt?.toDate ? jobData.completedAt.toDate() : new Date(),
+            read: jobData.payoutNotificationRead || false,
+            icon: 'cash',
+            iconColor: '#34A853',
+            amount: payout,
+            jobData: {
+              wasteType: jobData.wasteType,
+              volume: jobData.volume,
+              address: jobData.pickupAddress?.fullAddress,
+              completedAt: jobData.completedAt,
+              customerName: jobData.customerName,
+            }
+          });
+        });
+
+        setNotifications(payoutNotifications);
+        setLoading(false);
+        setRefreshing(false);
+      }, (error) => {
+        console.error('Error fetching payout notifications:', error);
+        setLoading(false);
+        setRefreshing(false);
+      });
+
+      return () => unsubscribe();
+    } catch (error) {
+      console.error('Error setting up payout listener:', error);
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   const fetchNotifications = () => {
     try {
@@ -121,13 +185,20 @@ const Notifications = () => {
             : notification
         )
       );
-      // In real app, update Firestore
+      
+      // Update Firestore for contractor payouts
+      if (userRole === 'contractor') {
+        const jobRef = doc(db, 'jobs', notificationId);
+        await updateDoc(jobRef, { 
+          payoutNotificationRead: true 
+        });
+      }
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
   };
 
-  const handleMarkAllAsRead = () => {
+  const handleMarkAllAsRead = async () => {
     Alert.alert(
       'Mark All as Read',
       'Are you sure you want to mark all notifications as read?',
@@ -135,10 +206,23 @@ const Notifications = () => {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Mark All', 
-          onPress: () => {
+          onPress: async () => {
             setNotifications(prev => 
               prev.map(notification => ({ ...notification, read: true }))
             );
+            
+            // Update Firestore for contractor payouts
+            if (userRole === 'contractor') {
+              try {
+                const updatePromises = notifications.map(notification => {
+                  const jobRef = doc(db, 'jobs', notification.id);
+                  return updateDoc(jobRef, { payoutNotificationRead: true });
+                });
+                await Promise.all(updatePromises);
+              } catch (error) {
+                console.error('Error marking all as read:', error);
+              }
+            }
           }
         },
       ]
@@ -179,7 +263,11 @@ const Notifications = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchNotifications();
+    if (userRole === 'contractor') {
+      fetchContractorPayouts();
+    } else {
+      fetchNotifications();
+    }
   };
 
   const renderNotificationItem = ({ item }) => (
@@ -201,43 +289,92 @@ const Notifications = () => {
             {!item.read && <View style={styles.unreadIndicator} />}
           </View>
           
-          <Text style={styles.message} numberOfLines={2}>
+          {/* Display amount prominently for payment notifications */}
+          {item.amount && (
+            <Text style={styles.amountText}>
+              ${item.amount.toFixed(2)}
+            </Text>
+          )}
+          
+          <Text style={styles.message} numberOfLines={3}>
             {item.message}
           </Text>
+          
+          {/* Show job details if available */}
+          {item.jobData && (
+            <View style={styles.jobDetails}>
+              {item.jobData.wasteType && (
+                <Text style={styles.jobDetailText}>
+                  <Ionicons name="trash-outline" size={12} color="#6B7280" /> {item.jobData.wasteType}
+                </Text>
+              )}
+              {item.jobData.volume && (
+                <Text style={styles.jobDetailText}>
+                  <Ionicons name="cube-outline" size={12} color="#6B7280" /> {item.jobData.volume}
+                </Text>
+              )}
+            </View>
+          )}
           
           <Text style={styles.timestamp}>
             {formatTimestamp(item.timestamp)}
           </Text>
         </View>
         
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDeleteNotification(item.id)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="close" size={16} color="#9CA3AF" />
-        </TouchableOpacity>
+        {userRole !== 'contractor' && (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDeleteNotification(item.id)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={16} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="notifications-outline" size={64} color="#9CA3AF" />
-      <Text style={styles.emptyStateTitle}>No Notifications</Text>
+      <Ionicons name={userRole === 'contractor' ? 'cash-outline' : 'notifications-outline'} size={64} color="#9CA3AF" />
+      <Text style={styles.emptyStateTitle}>
+        {userRole === 'contractor' ? 'No Payouts Yet' : 'No Notifications'}
+      </Text>
       <Text style={styles.emptyStateDescription}>
-        When you have new notifications, they'll appear here.
+        {userRole === 'contractor' 
+          ? 'Complete jobs to start earning. Your payment history will appear here.'
+          : 'When you have new notifications, they\'ll appear here.'}
       </Text>
     </View>
   );
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  const totalEarnings = notifications.reduce((sum, n) => sum + (n.amount || 0), 0);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <SharedHeader 
+          title={userRole === 'contractor' ? 'Payment History' : 'Notifications'}
+          showBackButton 
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#34A853" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <SharedHeader 
-        title="Notifications" 
-        subtitle={unreadCount > 0 ? `${unreadCount} unread` : null}
+        title={userRole === 'contractor' ? 'Payment History' : 'Notifications'}
+        subtitle={
+          userRole === 'contractor' 
+            ? notifications.length > 0 ? `Total: $${totalEarnings.toFixed(2)}` : null
+            : unreadCount > 0 ? `${unreadCount} unread` : null
+        }
         showBackButton 
         rightComponent={
           notifications.length > 0 && unreadCount > 0 ? (
@@ -275,6 +412,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6B7280',
   },
   markAllButton: {
     paddingHorizontal: 12,
@@ -355,6 +502,24 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 20,
     marginBottom: 8,
+  },
+  amountText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#34A853',
+    marginBottom: 8,
+  },
+  jobDetails: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 8,
+  },
+  jobDetailText: {
+    fontSize: 12,
+    color: '#6B7280',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   timestamp: {
     fontSize: 12,

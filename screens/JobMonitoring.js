@@ -454,7 +454,7 @@ const JobMonitoring = ({ navigation }) => {
           clearButtonMode="while-editing"
         />
         <View style={{ marginLeft: 10, backgroundColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}>
-          <Text style={{ color: '#374151', fontWeight: 'bold', fontSize: 15 }}>Total: {allJobs.length}</Text>
+          <Text style={{ color: '#374151', fontWeight: 'bold', fontSize: 15 }}>Total: {filteredJobs.length}</Text>
         </View>
       </View>
 

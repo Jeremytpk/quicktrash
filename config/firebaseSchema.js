@@ -312,3 +312,93 @@ service cloud.firestore {
   }
 }
 `;
+
+// Pricings Collection - stores system-wide pricing configuration
+export const PricingsSchema = {
+  pricings: {
+    // Document ID: "default" (can have multiple pricing tiers in future)
+    default: {
+      // Volume options with base prices
+      volumeOptions: [
+        {
+          id: "1-5_bags",
+          name: "1-5 Bags",
+          description: "Small household bags",
+          icon: "bag",
+          basePrice: 15.00
+        },
+        {
+          id: "pickup_load",
+          name: "Pickup Load",
+          description: "Half truck bed full",
+          icon: "car",
+          basePrice: 45.00
+        },
+        {
+          id: "trailer_load",
+          name: "Trailer Load",
+          description: "Full trailer or truck bed",
+          icon: "bus",
+          basePrice: 85.00
+        }
+      ],
+      
+      // Bag sizes with price multipliers
+      bagSizes: [
+        {
+          id: "S",
+          name: "Small",
+          description: "Up to 13 gallons",
+          priceMultiplier: 1.0
+        },
+        {
+          id: "M",
+          name: "Medium",
+          description: "13-30 gallons",
+          priceMultiplier: 1.2
+        },
+        {
+          id: "L",
+          name: "Large",
+          description: "30-45 gallons",
+          priceMultiplier: 1.5
+        },
+        {
+          id: "XL",
+          name: "Extra Large",
+          description: "45-60 gallons",
+          priceMultiplier: 1.8
+        },
+        {
+          id: "XXL",
+          name: "XX Large",
+          description: "60+ gallons",
+          priceMultiplier: 2.0
+        }
+      ],
+      
+      // Waste type specific pricing overrides
+      // Key format: "{volumeId}_{bagSizeId}"
+      // If not specified, uses: basePrice * priceMultiplier
+      wasteTypePricing: {
+        household: {
+          // Example: "pickup_load_L": 75.00  (custom price)
+          // If empty, uses default calculation
+        },
+        bulk: {},
+        yard: {},
+        construction: {},
+        recyclables: {}
+      },
+      
+      // Fee structure
+      serviceFeePercentage: 0.15,        // 15% service fee
+      contractorPayoutPercentage: 0.80,  // 80% to contractor
+      
+      // Timestamps
+      createdAt: "timestamp",
+      updatedAt: "timestamp"
+    }
+  }
+};
+

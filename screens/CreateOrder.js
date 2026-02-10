@@ -12,9 +12,10 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 import SharedHeader from '../components/SharedHeader';
 import OrderBasket from '../components/OrderBasket';
@@ -22,7 +23,7 @@ import OrderBasket from '../components/OrderBasket';
 const { width } = Dimensions.get('window');
 
 const CreateOrder = ({ navigation, route }) => {
-  const { wasteType } = route.params || {};
+  const { wasteType, pricingData: routePricingData } = route.params || {};
   
   const [selectedWasteType, setSelectedWasteType] = useState(wasteType?.id || 'household');
   const [selectedBagSize, setSelectedBagSize] = useState(null);
@@ -34,6 +35,7 @@ const CreateOrder = ({ navigation, route }) => {
   const [photos, setPhotos] = useState([]);
   const [pricing, setPricing] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pricingData, setPricingData] = useState(routePricingData || null);
 
   const wasteTypes = [
     { id: 'household', name: 'Household Trash', icon: 'home', color: '#34A853' },
@@ -43,7 +45,37 @@ const CreateOrder = ({ navigation, route }) => {
     { id: 'recyclables', name: 'Recyclables', icon: 'refresh', color: '#2196F3' },
   ];
 
-  const bagSizes = [
+  // Get pricing data from Firestore if not passed from route
+  useEffect(() => {
+    fetchPricingData();
+  }, []);
+
+  // Refetch pricing when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchPricingData();
+    }, [])
+  );
+
+  const fetchPricingData = async () => {
+    if (routePricingData) {
+      // Use pricing data passed from previous screen
+      return;
+    }
+    
+    try {
+      const pricingDoc = await getDoc(doc(db, 'pricings', 'default'));
+      if (pricingDoc.exists()) {
+        console.log('Fetched pricing data in CreateOrder:', pricingDoc.data());
+        setPricingData(pricingDoc.data());
+      }
+    } catch (error) {
+      console.error('Error fetching pricing:', error);
+    }
+  };
+
+  // Use pricing data from Firestore or fallback to defaults
+  const bagSizes = pricingData?.bagSizes || [
     { id: 'S', name: 'Small', description: 'Up to 13 gallons', priceMultiplier: 1.0 },
     { id: 'M', name: 'Medium', description: '13-30 gallons', priceMultiplier: 1.2 },
     { id: 'L', name: 'Large', description: '30-45 gallons', priceMultiplier: 1.5 },
@@ -51,27 +83,27 @@ const CreateOrder = ({ navigation, route }) => {
     { id: 'XXL', name: 'XX Large', description: '60+ gallons', priceMultiplier: 2.0 },
   ];
 
-  const volumeOptions = [
+  const volumeOptions = pricingData?.volumeOptions || [
     { 
       id: '1-5_bags', 
       name: '1-5 Bags', 
       description: 'Small household bags',
       icon: 'bag',
-      basePrice: 1
+      basePrice: 15
     },
     { 
       id: 'pickup_load', 
       name: 'Pickup Load', 
       description: 'Half truck bed full',
       icon: 'car',
-      basePrice: 1
+      basePrice: 45
     },
     { 
       id: 'trailer_load', 
       name: 'Trailer Load', 
       description: 'Full trailer or truck bed',
       icon: 'bus',
-      basePrice: 1
+      basePrice: 85
     },
   ];
 
@@ -80,10 +112,10 @@ const CreateOrder = ({ navigation, route }) => {
   }, []);
 
   useEffect(() => {
-    if (selectedVolume && selectedBagSize) {
+    if (selectedVolume && selectedBagSize && pricingData) {
       calculatePricing();
     }
-  }, [selectedWasteType, selectedVolume, selectedBagSize]);
+  }, [selectedWasteType, selectedVolume, selectedBagSize, pricingData]);
 
   const requestLocationPermission = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -123,11 +155,23 @@ const CreateOrder = ({ navigation, route }) => {
   const calculatePricing = () => {
     const volumeOption = volumeOptions.find(v => v.id === selectedVolume);
     const bagSize = bagSizes.find(b => b.id === selectedBagSize);
-    if (!volumeOption || !bagSize) return;
+    if (!volumeOption || !bagSize || !pricingData) return;
 
-    const baseFee = volumeOption.basePrice * bagSize.priceMultiplier;
-    const serviceFee = Math.round(baseFee * 0.15 * 100) / 100; // 15%
-    const disposalFee = Math.round(baseFee * 0.10 * 100) / 100; // 10%
+    // Check for waste-type specific custom pricing
+    const customPriceKey = `${selectedVolume}_${selectedBagSize}`;
+    const customPrice = pricingData.wasteTypePricing?.[selectedWasteType]?.[customPriceKey];
+    
+    // Use custom price if available, otherwise calculate from base price and multiplier
+    const baseFee = customPrice !== undefined 
+      ? customPrice 
+      : volumeOption.basePrice * bagSize.priceMultiplier;
+    
+    // Use service fee and contractor payout from pricing data
+    const serviceFeePercent = pricingData.serviceFeePercentage || 0.15;
+    const contractorPayoutPercent = pricingData.contractorPayoutPercentage || 0.80;
+    
+    const serviceFee = Math.round(baseFee * serviceFeePercent * 100) / 100;
+    const disposalFee = Math.round(baseFee * 0.10 * 100) / 100; // 10% disposal fee
     const total = baseFee + serviceFee + disposalFee;
 
     setPricing({
@@ -135,7 +179,7 @@ const CreateOrder = ({ navigation, route }) => {
       serviceFee,
       disposalFee,
       total,
-      contractorPayout: Math.round(total * 0.80 * 100) / 100, // 80% to contractor
+      contractorPayout: Math.round(total * contractorPayoutPercent * 100) / 100,
     });
   };
 
