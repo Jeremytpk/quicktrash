@@ -34,6 +34,7 @@
     "android": {
       "edgeToEdgeEnabled": true,
       "package": "com.quicktrash.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo/qt_logo_vide.png",
         "backgroundColor": "#34A853"
@@ -60,16 +61,30 @@
     "plugins": [
       "expo-location",
       "expo-image-picker",
+      ["@react-native-firebase/app", {
+        "android": {
+          "googleServicesFile": "./google-services.json"
+        }
+      }],
       "@react-native-firebase/crashlytics",
       "expo-notifications",
       "expo-asset",
-      "expo-maps"
+      "expo-maps",
+      "expo-font",
+      ["@stripe/stripe-react-native", {
+        "merchantIdentifier": "merchant.com.quicktrash.app",
+        "enableGooglePay": true
+      }]
     ],
     "extra": {
       "eas": {
         "projectId": "41d00a6b-1a36-48f9-a462-69f6bed08b86"
       }
     },
-    "owner": "jeremytpk"
+    "owner": "jeremytpk",
+    "updates": {
+      "url": "https://u.expo.dev/41d00a6b-1a36-48f9-a462-69f6bed08b86"
+    },
+    "runtimeVersion": "1.0.0"
   }
 }

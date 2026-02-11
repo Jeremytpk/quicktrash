@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CLIENT_ID</key>
+	<string>255447451336-ded6ogi8qfetph25r2bjd3epqamfhhd7.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.255447451336-ded6ogi8qfetph25r2bjd3epqamfhhd7</string>
 	<key>API_KEY</key>
 	<string>AIzaSyBTXSQNx0uZEtIcAaZtkq1VQv9nFGjhhuU</string>
 	<key>GCM_SENDER_ID</key>
@@ -9,7 +13,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.jeremytpk.QT</string>
+	<string>com.quicktrash.app</string>
 	<key>PROJECT_ID</key>
 	<string>quicktrash-1cdff</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +29,8 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:255447451336:ios:0664497a4097bd3ec2c7fd</string>
+	<string>1:255447451336:ios:fc8f1b55b7812cf6c2c7fd</string>
+	<key>DATABASE_URL</key>
+	<string>https://quicktrash-1cdff-default-rtdb.firebaseio.com</string>
 </dict>
 </plist>
