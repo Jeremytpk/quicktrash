@@ -6,7 +6,10 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:ios:production": "eas build -p ios --profile production",
+    "build:ios:production:clean": "eas build -p ios --profile production --clear-cache",
+    "update:production": "eas update --branch production"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

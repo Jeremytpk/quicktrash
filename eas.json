@@ -17,7 +17,18 @@
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "distribution": "store",
+      "channel": "production",
+      "cache": {
+        "cacheDefaultPaths": false
+      },
+      "ios": {
+        "resourceClass": "m-medium",
+        "cocoapods": "1.15.2"
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_VARIANT": "production"
+      }
     }
   },
   "submit": {

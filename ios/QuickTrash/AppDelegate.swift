@@ -1,7 +1,13 @@
 import Expo
+import FirebaseCore
 import React
 import ReactAppDependencyProvider
 
+// @generated begin react-native-maps-import - expo prebuild (DO NOT MODIFY) sync-bee50fec513f89284e0fa3f5d935afdde33af98f
+#if canImport(GoogleMaps)
+import GoogleMaps
+#endif
+// @generated end react-native-maps-import
 @UIApplicationMain
 public class AppDelegate: ExpoAppDelegate {
   var window: UIWindow?
@@ -23,12 +29,20 @@ public class AppDelegate: ExpoAppDelegate {
 
 #if os(iOS) || os(tvOS)
     window = UIWindow(frame: UIScreen.main.bounds)
+// @generated begin @react-native-firebase/app-didFinishLaunchingWithOptions - expo prebuild (DO NOT MODIFY) sync-10e8520570672fd76b2403b7e1e27f5198a6349a
+FirebaseApp.configure()
+// @generated end @react-native-firebase/app-didFinishLaunchingWithOptions
     factory.startReactNative(
       withModuleName: "main",
       in: window,
       launchOptions: launchOptions)
 #endif
 
+// @generated begin react-native-maps-init - expo prebuild (DO NOT MODIFY) sync-844302c2db9961a27bbca499a41165f3adffbed4
+#if canImport(GoogleMaps)
+GMSServices.provideAPIKey("AIzaSyBZ1Dsh7_p2AlwvakoKXPUAKwI3QtjulSg")
+#endif
+// @generated end react-native-maps-init
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
