@@ -7,7 +7,7 @@ podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties
 def ccache_enabled?(podfile_properties)
   # Environment variable takes precedence
   return ENV['USE_CCACHE'] == '1' if ENV['USE_CCACHE']
-  
+
   # Fall back to Podfile properties
   podfile_properties['apple.ccacheEnabled'] == 'true'
 end
@@ -19,6 +19,23 @@ ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNati
 platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 
 prepare_react_native_project!
+
+# Required for react-native-firebase 23+ (Firebase 11+ Swift-based SDKs) with use_frameworks! :static
+$RNFirebaseAsStaticFramework = true
+
+# Firebase pods need modular headers so their Swift-generated ObjC interfaces
+# can be imported across static framework boundaries.
+pod 'FirebaseCore', :modular_headers => true
+pod 'FirebaseInstallations', :modular_headers => true
+pod 'GoogleDataTransport', :modular_headers => true
+pod 'GoogleUtilities', :modular_headers => true
+pod 'nanopb', :modular_headers => true
+pod 'FirebaseCoreExtension', :modular_headers => true
+pod 'FirebaseFirestore', :modular_headers => true
+pod 'FirebaseFirestoreInternal', :modular_headers => true
+pod 'FirebaseAppCheckInterop', :modular_headers => true
+pod 'FirebaseAuthInterop', :modular_headers => true
+pod 'FirebaseStorage', :modular_headers => true
 
 target 'QuickTrash' do
   use_expo_modules!
@@ -62,8 +79,55 @@ target 'QuickTrash' do
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
 
-    # use_frameworks! static: suppress non-modular-include for pods that import React-Core headers
+    # Patch Firebase.h: the umbrella header guards Swift imports with
+    # __has_include("FirebaseXxx-umbrella.h"), which is always true for installed pods,
+    # but the generated -Swift.h doesn't exist at header-resolution time for static libs.
+    # Change each guard to check for the Swift header itself so the import is skipped
+    # when the file isn't available (static library builds).
+    firebase_h = "#{installer.sandbox.root}/Headers/Private/Firebase/Firebase.h"
+    if File.exist?(firebase_h)
+      content = File.read(firebase_h)
+      patched = content
+        .gsub('#if __has_include("FirebaseStorage-umbrella.h")',
+              '#if __has_include(<FirebaseStorage/FirebaseStorage-Swift.h>)')
+        .gsub('#if __has_include("FirebaseAuth-umbrella.h")',
+              '#if __has_include(<FirebaseAuth/FirebaseAuth-Swift.h>)')
+        .gsub('#if __has_include("FirebaseFunctions-umbrella.h")',
+              '#if __has_include(<FirebaseFunctions/FirebaseFunctions-Swift.h>)')
+      if patched != content
+        File.chmod(0644, firebase_h)
+        File.write(firebase_h, patched)
+      end
+    end
+
     installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        # Allow non-modular includes in all framework module targets
+        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+
+        # react-native-maps: disable module compilation so that
+        # #import <React/RCTViewManager.h> works as a plain textual include rather
+        # than hitting the module-isolation/submodule-declaration conflict introduced
+        # by use_frameworks! :linkage => :static.
+        if ['react-native-maps', 'react-native-google-maps'].include?(target.name)
+          config.build_settings['DEFINES_MODULE'] = 'NO'
+        end
+
+        # Enable modular headers for Firebase pods (required for Swift-based Firebase 11+)
+        firebase_deps = ['FirebaseCore', 'FirebaseInstallations', 'GoogleDataTransport',
+                        'GoogleUtilities', 'nanopb', 'FirebaseCoreExtension',
+                        'FirebaseFirestore', 'FirebaseFirestoreInternal',
+                        'FirebaseAppCheckInterop', 'FirebaseAuthInterop', 'FirebaseStorage']
+        if firebase_deps.include?(target.name)
+          config.build_settings['DEFINES_MODULE'] = 'YES'
+        end
+
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+        # Protobuf uses textual includes that are removed in C++17 strict mode
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'GPB_USE_PROTOBUF_FRAMEWORK_IMPORTS=0' unless config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'].include?('GPB_USE_PROTOBUF_FRAMEWORK_IMPORTS=0')
+      end
+
+      # use_frameworks! static: suppress non-modular-include for pods that import React-Core headers
       if target.name.include?('react-native-maps') || target.name.start_with?('RNFB')
         target.build_configurations.each do |cfg|
           %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS].each do |flag_key|
