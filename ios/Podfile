@@ -137,6 +137,17 @@ target 'QuickTrash' do
           end
         end
       end
+
+      # BoringSSL and gRPC contain pre-C99 K&R-style C code (implicit int return types).
+      # Modern Xcode treats -Wimplicit-int as an error; suppress it for these pods only.
+      if target.name == 'BoringSSL-GRPC' || target.name.start_with?('gRPC') || target.name.start_with?('grpc')
+        target.build_configurations.each do |cfg|
+          cfg.build_settings['GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS'] = 'NO'
+          current = cfg.build_settings['OTHER_CFLAGS'] || ['$(inherited)']
+          current = [current] if current.is_a?(String)
+          cfg.build_settings['OTHER_CFLAGS'] = current + ['-Wno-implicit-int', '-Wno-deprecated-declarations']
+        end
+      end
     end
   end
 end
