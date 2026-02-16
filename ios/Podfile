@@ -39,9 +39,8 @@ target 'QuickTrash' do
     ]
   end
 
-# @generated begin react-native-maps - expo prebuild (DO NOT MODIFY) sync-e9cc66c360abe50bc66d89fffb3c55b034d7d369
-  pod 'react-native-google-maps', path: File.dirname(`node --print "require.resolve('react-native-maps/package.json')"`)
-# @generated end react-native-maps
+# Use Apple Maps on iOS (avoids react-native-google-maps + use_frameworks static conflict)
+  pod 'react-native-maps', path: File.dirname(`node --print "require.resolve('react-native-maps/package.json')"`)
   config = use_native_modules!(config_command)
 
   use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
@@ -62,15 +61,15 @@ target 'QuickTrash' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
-    # Suppress non-modular-include warning for react-native-maps (static frameworks) without changing module semantics
+
+    # use_frameworks! static: suppress non-modular-include for pods that import React-Core headers
     installer.pods_project.targets.each do |target|
-      if target.name.include?('react-native-google-maps') || target.name.include?('react-native-maps')
+      if target.name.include?('react-native-maps') || target.name.start_with?('RNFB')
         target.build_configurations.each do |cfg|
           %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS].each do |flag_key|
             current = cfg.build_settings[flag_key] || ['$(inherited)']
             current = [current] if current.is_a?(String)
-            extra = ['-Wno-error=non-modular-include-in-framework-module', '-Wno-non-modular-include-in-framework-module']
-            cfg.build_settings[flag_key] = current + extra
+            cfg.build_settings[flag_key] = current + ['-Wno-error=non-modular-include-in-framework-module', '-Wno-non-modular-include-in-framework-module']
           end
         end
       end

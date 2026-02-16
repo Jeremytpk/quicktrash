@@ -19,9 +19,6 @@
       "autoIncrement": true,
       "distribution": "store",
       "channel": "production",
-      "cache": {
-        "cacheDefaultPaths": false
-      },
       "ios": {
         "resourceClass": "m-medium",
         "cocoapods": "1.15.2"

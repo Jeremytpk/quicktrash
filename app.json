@@ -20,7 +20,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.quicktrash.app",
-      "googleServicesFile": "./GoogleService-Info.plist",
       "config": {
         "googleMapsApiKey": "AIzaSyBZ1Dsh7_p2AlwvakoKXPUAKwI3QtjulSg"
       },
@@ -84,9 +83,7 @@
     },
     "owner": "jeremytpk",
     "updates": {
-      "url": "https://u.expo.dev/41d00a6b-1a36-48f9-a462-69f6bed08b86",
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
+      "url": "https://u.expo.dev/41d00a6b-1a36-48f9-a462-69f6bed08b86"
     },
     "runtimeVersion": "1.0.0"
   }
