@@ -105,11 +105,13 @@ target 'QuickTrash' do
         # Allow non-modular includes in all framework module targets
         config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
 
-        # react-native-maps: disable module compilation so that
-        # #import <React/RCTViewManager.h> works as a plain textual include rather
-        # than hitting the module-isolation/submodule-declaration conflict introduced
-        # by use_frameworks! :linkage => :static.
-        if ['react-native-maps', 'react-native-google-maps'].include?(target.name)
+        # react-native-maps and RNFB: disable module compilation so that React headers
+        # (RCTBridgeModule.h, RCTViewManager.h, etc.) work as plain textual includes.
+        # With use_frameworks! :static and DEFINES_MODULE=YES (default), Clang enforces
+        # modular includes; React headers are not modular, so RCT_EXPORT_MODULE /
+        # RCT_EXPORT_METHOD macro expansions fail to resolve RCTBridgeModule types —
+        # producing implicit-int errors on Xcode 17+ / iOS 26 SDK.
+        if ['react-native-maps', 'react-native-google-maps'].include?(target.name) || target.name.start_with?('RNFB')
           config.build_settings['DEFINES_MODULE'] = 'NO'
         end
 
